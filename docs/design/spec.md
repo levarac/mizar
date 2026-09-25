@@ -53,7 +53,7 @@ The list carries no wallets. Only the first-verified key per nullifier counts (f
 
 ## Evaluation rule (evaluator)
 
-Input: the verification-envelope pages for the event, restricted to observations whose commitment is anchored at or before `cutoffBlock`, plus the credential list as of that block's timestamp.
+Input: the verification-envelope pages for the event, restricted to observations whose commitment is anchored at or before `cutoffBlock`, plus the credential list as of that block's timestamp. The envelope carries anchor sequence numbers and `committedAt`, not block numbers, so the evaluator maps each anchor to its block from the commitment registry's on-chain events. Until that mapping is available for a live run, snapshot evaluation fails closed with `UNAVAILABLE`; fixtures carry an explicit anchor-to-block mapping.
 
 1. Verify each observation's signature, context equality with the event ID, and Merkle inclusion. Drop and count the failures by reason.
 2. Derive reciprocal relations exactly as the evidence layer's mutual derivation does: group by (eventId, definitionDigest, enin), dedupe by observation digest, union the observed RPIDs per reporter RPID, and keep A–B only when each heard the other in the same enin.
@@ -118,11 +118,12 @@ Tests (Foundry):
 ## Human-check service
 
 - `POST /challenge {eventId}` returns `{challenge, expiresAt}`. The challenge is random, single-use and valid for 10 minutes.
-- `POST /bind {eventId, eventKey, challenge, appSignature}` verifies the purpose `0x01` signature and returns `{signal}`. The signal is `hashToField(keccak256(eventId ‖ eventKeyAddress ‖ challenge))`, following IDKit's signal rules.
-- `POST /verify {eventId, eventKey, idkitResult}` forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
+- `POST /rp-context {eventId}` returns the signed RP context that IDKit 4 requires, signed with the `WORLD_RP_SIGNING_KEY` binding.
+- `POST /bind {eventId, eventKey, challenge, appSignature}` verifies the purpose `0x01` signature and returns `{signal}`, where `signal = keccak256(eventId ‖ eventKeyAddress ‖ challenge)` as 32-byte hex. The page passes this value to IDKit unchanged; IDKit applies its own field hashing, so the service must not hash it again.
+- `POST /verify {eventId, eventKey, idkitResult}` first requires `idkitResult.signal_hash == hashSignal(signal)` using the pinned `@worldcoin/idkit-core` hashing helper, then forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
 - `GET /credentials?eventId=` returns the published credential list, including proof digests.
 
-Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
+Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_RP_SIGNING_KEY`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
 
 ## Pages
 
