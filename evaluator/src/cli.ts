@@ -156,8 +156,10 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
       }
       const posted = await readPostedRoot(rpc, contract, params.chainId,
         params.snapshot.id, params.snapshot.cutoffBlock);
-      if (posted.cutoffBlock !== params.snapshot.cutoffBlock)
-        throw new Error("on-chain cutoff block mismatch");
+      if (posted.cutoffBlock !== params.snapshot.cutoffBlock) {
+        console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch",
+          reason: "cutoff_block_mismatch" })); return 1;
+      }
       if (posted.manifestDigest.toLowerCase() !== ("0x" + digestBytes(manifestBytes)).toLowerCase()) {
         console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch",
           reason: "manifest_digest_mismatch" })); return 1;
