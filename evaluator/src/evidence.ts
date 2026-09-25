@@ -1,7 +1,7 @@
 // Ported from the pre-existing evidence-layer reference: Observation, commitment,
 // receipt domains, admission fields, and the RFC 6962-style inclusion tree.
 import { keccak256, AbiCoder } from "ethers";
-import { b64, bytes, cosePayload, coseVerify, decode, domain, encode, fromHex, hex, map, sha, uint } from "./codec.js";
+import { b64, bytes, cosePayload, coseVerify, decode, domain, fromHex, hex, map, sha, uint } from "./codec.js";
 
 export interface Observation {
   digest: string;
@@ -179,7 +179,7 @@ function verifyAdmission(env: Envelope, eventId: string) {
   const receiptKey = bytes(d.get(9), 33);
   if (!operatorId(receiptKey).equals(bytes(d.get(10), 32))) throw new Error("operator ID mismatch");
   if (env.operatorPublicKey !== receiptKey.toString("base64")) throw new Error("operator key hint mismatch");
-  return { digest, receiptKey, validFrom, validUntil, keySetBytes, signed };
+  return { digest, receiptKey, validFrom, validUntil };
 }
 export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: number,
   anchorBlocks: Record<string, number>): EvidenceResult {
@@ -243,14 +243,9 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
         if (!o) throw new Error("missing envelope Observation");
         return b64(o.signedObservation);
       });
-      const rebuilt = encode(new Map<number, unknown>([
-        [1, 1], [2, fromHex(eventId, 32)], [3, uint(c.get(4))], [4, signedObservations],
-        [5, []], [6, admission.keySetBytes], [7, [admission.signed]],
-      ]));
-      if (!sha(rebuilt).equals(bytes(c.get(9), 32)) || rebuilt.length !== uint(c.get(10)))
-        throw new Error("commitment bundle mismatch");
-      if (item.bundle !== null && !b64(item.bundle).equals(rebuilt))
-        throw new Error("provided bundle differs from reconstructed bundle");
+      // D11: bundle:null cannot reveal delegation certificates or prove the
+      // committed bundle digest. Merkle inclusion binds these exact Observation
+      // digests to the signed, registry-anchored commitment root instead.
       for (let i = 0; i < ordered.length; i++) {
         const declared = ordered[i], signedObservation = signedObservations[i];
         if (seen.has(declared)) throw new Error("duplicate Observation digest");
@@ -276,7 +271,10 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
             const b = bytes(x, 17); if (b[0] !== 1) throw new Error("invalid_rpid"); return hex(b);
           });
           if (observed.some((x, j) => j > 0 && x <= observed[j - 1])) throw new Error("unsorted_observed_rpids");
-          if (p.get(4) !== null && !(p.get(4) instanceof Uint8Array)) throw new Error("invalid_rpid_claim");
+          if (p.get(4) !== null) {
+            if (!(p.get(4) instanceof Uint8Array)) throw new Error("invalid_rpid_claim");
+            throw new Error("delegation_unsupported");
+          }
           if (p.get(5) !== null) bytes(p.get(5), 32);
           observations.push({ digest: declared, eventId: env.context, definitionDigest: admission.digest,
             observer: hex(observer), rpid: hex(rpid), enin: uint(p.get(2)), observed });

@@ -42,10 +42,17 @@ inputs and derived mapping under the output directory for offline replay.
 `verify` recomputes the root and the sorted eligibility, rejection, and proof
 outputs from the archived inputs. Without `--rpc` it compares with the
 manifest root. With both `--rpc` and `--contract` it also checks the claim
-contract's `RootPosted` event; for a live-origin manifest it rechecks the
-registry mappings. The contract's snapshots are private, so the event is the
-public read surface. The on-chain manifest digest encoding is not yet pinned
-by the design spec and is not compared.
+contract's `RootPosted` event, including its root, cutoff block, and SHA-256
+of the exact written manifest bytes. For a live-origin manifest it rechecks
+the registry mappings. The contract's snapshots are private, so the event is
+the public read surface.
+
+The public verification-envelope API currently returns `bundle: null`. It
+cannot expose bundled delegation certificates or support recomputation of the
+bundle digest. Under design decision D11, Mizar verifies each signed
+Observation's inclusion in the signed and anchored commitment root, and
+requires the Observation's own signer key for its event-key mapping. It does
+not claim to verify delegated provenance from these pages.
 
 `progress` requires an explicit `pendingSource` parameter or
 `--pending <source>`. The only supported pending input today is the labeled

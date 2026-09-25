@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { ed25519 } from "@noble/curves/ed25519.js";
 import { getBytes, recoverAddress, toBeHex, zeroPadValue } from "ethers";
-import { appDigest, appMessage, eventKeyAddress, fromHex, hex } from "../src/codec.js";
+import { appDigest, appMessage, eventKeyAddress, fromHex, hex, sha } from "../src/codec.js";
 import { verifyEvidence, type Envelope } from "../src/evidence.js";
 import { deriveRelations, evaluateRule, verifyCredentials, type CredentialList, type Parameters } from "../src/evaluate.js";
 import { loadEnvelopes } from "../src/io.js";
@@ -236,6 +236,8 @@ describe("CLI receipt", () => {
       expect(readFileSync(join(out, "proofs", credentials.credentials[0].eventKeyAddress.toLowerCase() + ".json"), "utf8"))
         .toContain("proof");
       const manifestPath = join(out, "manifest.json");
+      const evaluatedReceipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
+      expect(evaluatedReceipt.manifestDigest).toBe("0x" + hex(sha(readFileSync(manifestPath))));
       expect(run("verify", "--manifest", manifestPath).stdout).toContain('"result":"PASS"');
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       manifest.root = manifest.root.slice(0, -1) + (manifest.root.endsWith("0") ? "1" : "0");

@@ -81,10 +81,12 @@ async function evaluate(paramsFile: string, out: string) {
     trust: { credentialsPublicKey: i.params.credentialsPublicKey,
       anchorBlockMapping: "supplied sidecar; compare against chain before settlement" },
   };
-  await writeJson(join(dir, "manifest.json"), manifest);
+  const manifestPath = join(dir, "manifest.json");
+  await writeJson(manifestPath, manifest);
+  const manifestDigest = "0x" + digestBytes(await readFile(manifestPath));
   console.log(JSON.stringify({ result: "EVALUATED", root: evaluation.root,
     eligible: evaluation.eligible.length, rejected: evaluation.rejected.length,
-    invalidObservations: evaluation.invalidObservations.length, out: dir }));
+    invalidObservations: evaluation.invalidObservations.length, manifestDigest, out: dir }));
 }
 async function verify(manifestPath: string, rpc?: string, contract?: string) {
   const remote = manifestPath.startsWith("https://");
@@ -92,7 +94,11 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
   const dir = remote ? new URL(".", path).toString() : dirname(path);
   const readRelative = (name: string) => readSource(name, dir);
   let manifest: any;
-  try { manifest = JSON.parse((await readSource(path, process.cwd())).toString()); }
+  let manifestBytes: Buffer;
+  try {
+    manifestBytes = await readSource(path, process.cwd());
+    manifest = JSON.parse(manifestBytes.toString());
+  }
   catch (error) { console.log(JSON.stringify({ result: "UNAVAILABLE", reason: String(error) })); return 2; }
   try {
     const readInput = async (name: string) => {
@@ -152,6 +158,10 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
         params.snapshot.id, params.snapshot.cutoffBlock);
       if (posted.cutoffBlock !== params.snapshot.cutoffBlock)
         throw new Error("on-chain cutoff block mismatch");
+      if (posted.manifestDigest.toLowerCase() !== ("0x" + digestBytes(manifestBytes)).toLowerCase()) {
+        console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch",
+          reason: "manifest_digest_mismatch" })); return 1;
+      }
       if (posted.root.toLowerCase() !== evaluation.root.toLowerCase()) {
         console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch" })); return 1;
       }
