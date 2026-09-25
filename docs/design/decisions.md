@@ -126,3 +126,18 @@ This decision took two rounds.
 **Scope.** iOS first. Android devices still contribute observations, but cannot claim in the hackathon build.
 
 **Open.** The two callback URLs; which registry event the demo evaluates. The only registered test event ends exactly at the submission deadline, so claims after the claim window cannot be shown on that event unless Mizar's evaluation window is set independently of the event's validity.
+
+## D10. Feedback during the event: live progress and rolling settlement (proposed, 2026-09-26)
+
+**Problem.** D7 settled once, after the claim window closed. An attendee would not learn that they qualified until after the event, and the only registered test event ends at the submission deadline, so a post-window claim could not be demonstrated in time.
+
+**Key property.** The per-counterpart rule in D5 is monotone in its inputs. Adding observations or verified partners never turns a pass into a fail. The one exception is the RPID-squatting rule: a later conflicting claim on an RPID can remove relations.
+
+**Proposal.** Three levels of feedback.
+1. **Live progress (minutes).** A small Mizar service evaluates the not-yet-anchored evidence and shows each attendee only their own progress, for example "verified partners 1/2, windows 2/2". It says "reached" the moment the rule is met. This is provisional and never used for claims.
+2. **Rolling settlement (for example every 30 minutes).** The evaluator snapshots the evidence anchored up to a block, computes eligibility, and posts the root with that cutoff. Anyone in a posted root can claim immediately. The record reads "met the rule on evidence anchored up to block X", and each snapshot can be recomputed independently. Because each snapshot is evaluated against its own cutoff, a later squatting claim cannot revoke an earlier eligibility.
+3. **Final settlement** after the event ends, so late qualifiers are included.
+
+**Effect on the timing issue in D9.** Rolling snapshots during the test event's validity let the claim be demonstrated before submission, with no new event registration.
+
+**To verify.** How often the evidence layer anchors commitments; this bounds the latency of level 2. Level 1 needs reciprocity data from the evidence layer's live feed, so Mizar runs as a small always-on service as well as a CLI.
