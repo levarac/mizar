@@ -152,7 +152,7 @@ This decision took two rounds.
 - each observation's Merkle inclusion against the commitment's signed Merkle root
 - each observation's own signature
 
-It accepts only observations signed directly by their event key. Any observation that would need a delegation certificate is rejected with the reason `delegation_unsupported` and counted in `rejected.json`. The bundle digest check is out of scope for this build.
+An observation counts for a credentialed event key only when its signature recovers that same key. An observation whose signer is not a credentialed key is `not_credentialed` and cannot contribute to the credentialed graph. Observations carry the signing key but no separately claimed subject key, and the public data carries no delegation certificates, so Mizar cannot tell a delegated signer from an ordinary uncredentialed one. It emits `delegation_unsupported` only when the input explicitly claims a different subject or a delegation path without a verifiable certificate; otherwise delegation status is unknown and not reported. The bundle digest check is out of scope for this build. (Refined the same morning after the implementation sub-PM pointed out that the first wording invented a classification the data cannot support.)
 
 **Why this is enough for Mizar.** Delegation certificates prove which keys may sign on behalf of others in the evidence layer. Mizar does not rely on that: an event key counts only after the distinct-human gate has bound it (D6), and relations are built only from observations those keys signed themselves.
 
