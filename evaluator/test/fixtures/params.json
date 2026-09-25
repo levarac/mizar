@@ -1,0 +1,14 @@
+{
+  "evaluatorVersion": "mizar-eval/1",
+  "eventId": "0x9640b46efa4c89cedf27e852e79e424f0cfa330d77b14fe77e478c784f1bc4dd",
+  "chainId": 11155111,
+  "minPartners": 2,
+  "minWindowsPerPartner": 2,
+  "evidenceSource": "envelopes.json",
+  "credentialsSource": "credentials.json",
+  "anchorBlocksSource": "anchor-blocks.json",
+  "snapshot": {
+    "id": 1,
+    "cutoffBlock": 100
+  }
+}
