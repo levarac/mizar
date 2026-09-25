@@ -75,7 +75,7 @@ Input: the verification-envelope pages for the event, restricted to observations
 
 Output directory:
 
-- `manifest.json`: the parameters, the digests of all inputs (observation digests, credential list digest, anchor range), the evaluator version and the root
+- `manifest.json`: the parameters, the digests of all inputs (observation digests, credential list digest, anchor range), the evaluator version and the root. `manifestDigest` is `SHA256` of the exact UTF-8 bytes of `manifest.json` as written by `mizar evaluate`. The manifest does not contain its own digest, and the published file is the one that is hashed.
 - `eligible.json`: the sorted addresses plus a per-key explanation (partners and windows)
 - `rejected.json`: each non-eligible credentialed key with a reason code (`too_few_partners`, `too_few_windows`, `rpid_conflict`, `not_credentialed`)
 - `proofs/<address>.json`: the Merkle proof for each eligible key
@@ -83,7 +83,7 @@ Output directory:
 CLI:
 
 - `mizar evaluate --params p.json --out dir/`
-- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the manifest's root. When both `--rpc` and `--contract` are given, it also compares with the root posted on-chain for that snapshot.
+- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the manifest's root. When both `--rpc` and `--contract` are given, it also reads the `RootPosted` event for that snapshot and compares its root, `manifestDigest` and `cutoffBlock` with the recomputed values. The contract has no snapshot getter, so the event is the on-chain source.
 - `mizar progress --params p.json --key <addr> [--pending <source>]` reads an explicitly configured pending-evidence source and labels its output provisional. If no pending source is configured, it returns `UNAVAILABLE`. Fixture mode may use a labeled synthetic pending feed. Progress output never qualifies anyone for a claim. The live pending feed of the evidence layer, including its format and admission binding, is not yet defined.
 
 Evidence and the rule are reimplemented in this repository from the public specification of the evidence layer. Any logic ported from the pre-existing reference code is marked in the file header as ported.
