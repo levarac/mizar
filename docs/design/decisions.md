@@ -106,3 +106,23 @@ This decision took two rounds.
 - A challenge game, bonds, or bounties.
 - On-chain World ID verification.
 - Anonymous claims.
+
+## D9. Claim leaf and the app-side signing entry point (proposed, 2026-09-26)
+
+**Context.** The event key exists only inside the attendee's app. Both the distinct-human binding and the claim need a signature by that key, so the app needs a new entry point that an external web page can call.
+
+**Proposal.**
+- **Typed, not blind, signing.** A single app link handler accepts exactly two typed purposes: binding a distinct-human check to the event key, and authorising a claim to a recipient on a given chain and claim contract. The handler shows a plain-language confirmation that includes the full recipient address. A generic "sign these bytes" entry point was rejected because it is blind signing: the app could not show what is being authorised, and the most damaging attack, a claim redirected to an attacker's wallet, is stopped only when the person reads the recipient.
+- **Domain-separated digest.** The app signs `SHA256(0xFF || "beid/event-key-sign/v1" || 0x00 || purpose || eventId || body)` with the existing event-key signing call. The leading `0xFF` and the tag keep these signatures from ever parsing as observations. EIP-712 is not possible without changing the SDK, because the SDK signs a SHA-256 of bytes. The contract therefore recovers the signer with ECDSA over this SHA-256 digest.
+- **Results go back only to fixed callbacks.** Each purpose returns its result to one compiled-in https callback. Callers cannot choose where results go, and nothing is placed on the clipboard.
+- **The leaf is key-only.** The eligible Merkle leaf is the event key's Ethereum address. The recipient is authorised at claim time by the signature. The contract marks `(eventId, eventKeyAddress)` as spent. This replaces the earlier idea of putting the recipient in the leaf, which would have required every recipient to be known before evaluation.
+
+**Side effect on privacy (D8).** With key-only leaves, the published inputs to the recomputation need no wallets. The link from event key to wallet appears only when a person chooses to claim.
+
+**Facts found while reading the app code.**
+- The event key is derived per event *code string*, not per registry event ID. A phone that joins the same event by two routes gets two keys, and the RPID-to-key mapping must expect this.
+- The device secret is stored in ordinary app preferences, not in hardware. Deleting the app loses the ability to claim.
+
+**Scope.** iOS first. Android devices still contribute observations, but cannot claim in the hackathon build.
+
+**Open.** The two callback URLs; which registry event the demo evaluates. The only registered test event ends exactly at the submission deadline, so claims after the claim window cannot be shown on that event unless Mizar's evaluation window is set independently of the event's validity.
