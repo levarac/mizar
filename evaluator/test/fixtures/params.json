@@ -8,6 +8,7 @@
   "evidenceSource": "envelopes.json",
   "credentialsSource": "credentials.json",
   "anchorBlocksSource": "anchor-blocks.json",
+  "pendingSource": "pending.json",
   "snapshot": {
     "id": 1,
     "cutoffBlock": 100,

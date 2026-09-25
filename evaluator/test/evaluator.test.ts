@@ -1,23 +1,25 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { getBytes, recoverAddress, toBeHex, zeroPadValue } from "ethers";
 import { appDigest, appMessage, eventKeyAddress, fromHex, hex } from "../src/codec.js";
-import { verifyEvidence } from "../src/evidence.js";
+import { verifyEvidence, type Envelope } from "../src/evidence.js";
 import { deriveRelations, evaluateRule, verifyCredentials, type CredentialList, type Parameters } from "../src/evaluate.js";
+import { loadEnvelopes } from "../src/io.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const fixture = <T>(name: string): T =>
   JSON.parse(readFileSync(join(root, "test/fixtures", name), "utf8")) as T;
 const params = fixture<Parameters>("params.json");
 const credentials = fixture<CredentialList>("credentials.json");
-const pages = fixture<Parameters[]>("envelopes.json");
+const pages = fixture<Envelope[]>("envelopes.json");
 const anchors = fixture<Record<string, number>>("anchor-blocks.json");
-const evidence = verifyEvidence(pages as never, params.eventId, params.snapshot.cutoffBlock, anchors);
+const evidence = verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, anchors);
 const address = (index: number) => credentials.credentials[index].eventKeyAddress.toLowerCase();
 const participantPasses = (result: ReturnType<typeof evaluateRule>, index: number) =>
   result.eligible.some(x => x.address.toLowerCase() === address(index));
@@ -76,16 +78,90 @@ describe("fixture evidence and evaluation", () => {
     expect(stricter.rejected.find(x => x.address.toLowerCase() === address(0))?.reason).toBe("too_few_windows");
   });
   it("fails closed if the trusted block map is absent", () => {
-    expect(() => verifyEvidence(pages as never, params.eventId, params.snapshot.cutoffBlock, {}))
+    expect(() => verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, {}))
       .toThrow("missing trusted anchor block mapping");
+  });
+  it("reassembles inner observation continuation before checking the commitment", () => {
+    const [original] = structuredClone(pages);
+    const first = structuredClone(original), second = structuredClone(original);
+    first.commitments[0].inclusions = original.commitments[0].inclusions.slice(0, 7);
+    first.observations = original.observations.slice(0, 7);
+    first.commitments[0].nextObservationCursor = "6";
+    second.commitments[0].inclusions = original.commitments[0].inclusions.slice(7);
+    second.observations = original.observations.slice(7);
+    second.commitments[0].observationCursor = "6";
+    expect(verifyEvidence([first, second], params.eventId, params.snapshot.cutoffBlock, anchors).inputDigests)
+      .toEqual(evidence.inputDigests);
+    expect(() => verifyEvidence([first], params.eventId, params.snapshot.cutoffBlock, anchors))
+      .toThrow("incomplete envelope pagination");
+  });
+  it("follows the verification-envelope API's inner continuation with fixture responses", async () => {
+    const [original] = structuredClone(pages);
+    const first = structuredClone(original), second = structuredClone(original);
+    first.commitments[0].inclusions = original.commitments[0].inclusions.slice(0, 7);
+    first.observations = original.observations.slice(0, 7);
+    first.commitments[0].nextObservationCursor = "6";
+    second.commitments[0].inclusions = original.commitments[0].inclusions.slice(7);
+    second.observations = original.observations.slice(7);
+    second.commitments[0].observationCursor = "6";
+    const requested: string[] = [];
+    vi.stubGlobal("fetch", async (url: URL) => {
+      requested.push(String(url));
+      return new Response(JSON.stringify(requested.length === 1 ? first : second),
+        { status: 200, headers: { "content-type": "application/json" } });
+    });
+    try {
+      const url = `https://fixture.invalid/v1/events/${params.eventId.slice(2)}/verification`;
+      const loaded = await loadEnvelopes(url, root, params.eventId);
+      expect(loaded).toHaveLength(2);
+      expect(requested[1]).toContain("observationCursor=6");
+      expect(verifyEvidence(loaded, params.eventId, params.snapshot.cutoffBlock, anchors).inputDigests)
+        .toEqual(evidence.inputDigests);
+    } finally { vi.unstubAllGlobals(); }
   });
 });
 
 describe("Alcor credentials", () => {
+  // Exact public fixture emitted by alcor worker at commit 448ab64.
+  const producer = fixture<{ testAttestationSeed: string; response: CredentialList }>("alcor-signed-credentials-v1.json");
+  const producerParams: Parameters = { ...params, eventId: producer.response.eventId,
+    credentialsPublicKey: producer.response.credentials[0].attestation.publicKey,
+    snapshot: { ...params.snapshot, cutoffTimestamp: Date.parse("2026-09-26T00:00:00.000Z") / 1000 } };
   it("verifies the pinned Ed25519 key, attestation and app binding", () => {
     const result = verifyCredentials(credentials, params);
     expect(result.accepted.size).toBe(5);
     expect(result.invalid.map(x => x.reason)).toEqual(["duplicate_nullifier_or_key", "duplicate_nullifier_or_key"]);
+  });
+  it("consumes the exact independently produced Alcor fixture", () => {
+    const result = verifyCredentials(producer.response, producerParams);
+    expect(result.accepted.size).toBe(1);
+    expect(result.invalid).toEqual([]);
+  });
+  it("rejects producer fixture signature and public-key tampering", () => {
+    const signature = structuredClone(producer.response);
+    signature.credentials[0].attestation.signature = "0x" + "00".repeat(64);
+    expect(verifyCredentials(signature, producerParams).invalid[0].reason).toBe("invalid_attestation_signature");
+    const key = structuredClone(producer.response);
+    key.credentials[0].attestation.publicKey = "0x" + "00".repeat(32);
+    expect(verifyCredentials(key, producerParams).invalid[0].reason).toBe("attestation_public_key_mismatch");
+  });
+  it("rejects a producer app-signature change even when attestation is re-signed", () => {
+    const list = structuredClone(producer.response);
+    const entry = list.credentials[0];
+    entry.appSignature = "0x" + "00" + entry.appSignature.slice(4);
+    const { attestation: _old, ...unsigned } = entry;
+    const canonical = (value: unknown): string => {
+      if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+      if (value && typeof value === "object")
+        return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+          .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+      return JSON.stringify(value);
+    };
+    entry.attestation.signature = "0x" + hex(ed25519.sign(
+      Buffer.from("alcor/credential/v1\0" + canonical(unsigned)), fromHex(producer.testAttestationSeed, 32)));
+    const result = verifyCredentials(list, producerParams);
+    expect(result.accepted.size).toBe(0);
+    expect(result.invalid[0].reason).not.toBe("invalid_attestation_signature");
   });
   it.each([
     ["attestation signature", (entry: any) => { entry.attestation.signature = entry.attestation.signature.slice(0, -2) + "00"; }],
@@ -114,6 +190,39 @@ describe("OpenZeppelin address-only tree", () => {
 });
 
 describe("CLI receipt", () => {
+  it("uses an explicit synthetic pending feed and refuses missing live feed", () => {
+    const run = (file: string) => spawnSync("pnpm",
+      ["mizar", "progress", "--params", file, "--key", credentials.credentials[0].eventKeyAddress],
+      { cwd: root, encoding: "utf8", timeout: 30_000 });
+    const fixtureProgress = run("test/fixtures/params.json");
+    expect(fixtureProgress.status).toBe(0);
+    expect(fixtureProgress.stdout).toContain('"source":"synthetic-pending-fixture"');
+    expect(fixtureProgress.stdout).toContain('"reached":true');
+    const out = mkdtempSync(join(tmpdir(), "mizar-progress-test-"));
+    try {
+      const noFeed = join(out, "params.json");
+      const { pendingSource: _omitted, ...withoutPending } = params;
+      writeFileSync(noFeed, JSON.stringify(withoutPending));
+      const unavailable = run(noFeed);
+      expect(unavailable.status).toBe(2);
+      expect(unavailable.stdout).toContain('"result":"UNAVAILABLE"');
+    } finally { rmSync(out, { recursive: true, force: true }); }
+  }, 30_000);
+  it("returns UNAVAILABLE before fetching live evidence without registry mapping", () => {
+    const out = mkdtempSync(join(tmpdir(), "mizar-live-test-"));
+    try {
+      const file = join(out, "params.json");
+      writeFileSync(file, JSON.stringify({ ...params,
+        evidenceSource: `https://fixture.invalid/v1/events/${params.eventId.slice(2)}/verification`,
+        rpcUrl: undefined, commitmentRegistry: undefined }));
+      const result = spawnSync("pnpm",
+        ["mizar", "evaluate", "--params", file, "--out", join(out, "result")],
+        { cwd: root, encoding: "utf8", timeout: 30_000 });
+      expect(result.status).toBe(2);
+      expect(result.stdout).toContain('"result":"UNAVAILABLE"');
+      expect(result.stdout).toContain("all three registry addresses");
+    } finally { rmSync(out, { recursive: true, force: true }); }
+  }, 30_000);
   it("writes four output classes, passes, and fails on one-bit input/root changes", () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-eval-test-"));
     const run = (...args: string[]) => spawnSync("pnpm", ["mizar", ...args], {
@@ -144,5 +253,5 @@ describe("CLI receipt", () => {
       expect(badInput.status).toBe(1);
       expect(badInput.stdout).toContain('"fault":"invalid_signature"');
     } finally { rmSync(out, { recursive: true, force: true }); }
-  });
+  }, 30_000);
 });

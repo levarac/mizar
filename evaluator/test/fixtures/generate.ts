@@ -142,6 +142,7 @@ const params = {
   credentialsPublicKey,
   evidenceSource: "envelopes.json", credentialsSource: "credentials.json",
   anchorBlocksSource: "anchor-blocks.json",
+  pendingSource: "pending.json",
   snapshot: { id: 1, cutoffBlock: 100, cutoffTimestamp: from + 10_001 },
 };
 const threeAddresses = ["A", "B", "C"].map(label => eventKeyAddress(pub(label)))
@@ -155,6 +156,8 @@ const threeAddressVector = {
 for (const [name, value] of Object.entries({
   "envelopes.json": [envelope], "credentials.json": { eventId: params.eventId, credentials },
   "anchor-blocks.json": { [commitmentHash]: 90 }, "params.json": params,
+  "pending.json": { kind: "synthetic-pending-fixture", eventId: params.eventId,
+    evidenceSource: "envelopes.json", anchorBlocksSource: "anchor-blocks.json" },
   "merkle-3-address.json": threeAddressVector,
 })) writeFileSync(join(here, name), JSON.stringify(value, null, 2) + "\n");
 console.log(JSON.stringify({ fixture: here, observations: ordered.length, credentials: credentials.length,
