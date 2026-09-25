@@ -33,6 +33,7 @@ The app-side signing entry point is built in the existing app on a separate bran
 ```json
 { "evaluatorVersion": "mizar-eval/1", "eventId": "0x…", "chainId": 11155111,
   "minPartners": 2, "minWindowsPerPartner": 2, "credentialsSource": "<alcor list URL>",
+  "credentialsPublicKey": "0x<32-byte Ed25519 public key of the human-check service>",
   "snapshot": { "id": 1, "cutoffBlock": 0 } }
 ```
 
@@ -43,11 +44,21 @@ The app-side signing entry point is built in the existing app on a separate bran
 - `eventKey`: 33-byte hex
 - `eventKeyAddress`
 - `nullifierHash`
-- `verifiedAt`
+- `verifiedAt`: a UTC ISO-8601 string
 - `challenge`
 - `appSignature`: the purpose `0x01` signature
 - `proofDigest`: sha256 of the World proof bundle
-- `attestation`: the service's own signature over the entry
+- `attestation`: `{"algorithm":"Ed25519","publicKey":"0x<32-byte>","signature":"0x<64-byte>"}`
+
+Wire format of `GET /credentials?eventId=`: `{"eventId":"0x<32-byte>","credentials":[<entry>, ...]}`. All signed fields are strings.
+
+The signed bytes are the UTF-8 string `alcor/credential/v1` followed by one `0x00` byte, then the entry as JSON with `attestation` omitted and keys sorted recursively.
+
+Before counting an entry, the evaluator does three things:
+
+1. It checks that `attestation.publicKey` equals the `credentialsPublicKey` published in the evaluation parameters. The key inside an entry is never a trust authority on its own.
+2. It verifies the Ed25519 signature.
+3. It verifies the purpose `0x01` app signature against `eventKeyAddress`.
 
 The list carries no wallets. Only the first-verified key per nullifier counts (first by `verifiedAt`), so the list only grows.
 
