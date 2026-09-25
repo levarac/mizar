@@ -84,7 +84,7 @@ CLI:
 
 - `mizar evaluate --params p.json --out dir/`
 - `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the manifest's root. When both `--rpc` and `--contract` are given, it also compares with the root posted on-chain for that snapshot.
-- `mizar progress --params p.json --key <addr>` reads not-yet-anchored evidence and prints provisional progress. It is never used for claims.
+- `mizar progress --params p.json --key <addr> [--pending <source>]` reads an explicitly configured pending-evidence source and labels its output provisional. If no pending source is configured, it returns `UNAVAILABLE`. Fixture mode may use a labeled synthetic pending feed. Progress output never qualifies anyone for a claim. The live pending feed of the evidence layer, including its format and admission binding, is not yet defined.
 
 Evidence and the rule are reimplemented in this repository from the public specification of the evidence layer. Any logic ported from the pre-existing reference code is marked in the file header as ported.
 
