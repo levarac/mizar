@@ -4,11 +4,13 @@
   "chainId": 11155111,
   "minPartners": 2,
   "minWindowsPerPartner": 2,
+  "credentialsPublicKey": "0xf37cc8db9daba413d9e0c0b987b86570aedc5c3f0f634f76f54e647132ea85e2",
   "evidenceSource": "envelopes.json",
   "credentialsSource": "credentials.json",
   "anchorBlocksSource": "anchor-blocks.json",
   "snapshot": {
     "id": 1,
-    "cutoffBlock": 100
+    "cutoffBlock": 100,
+    "cutoffTimestamp": 1800010001
   }
 }

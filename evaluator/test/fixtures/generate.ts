@@ -4,7 +4,9 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
+import { ed25519 } from "@noble/curves/ed25519.js";
 import { AbiCoder, SigningKey, keccak256 } from "ethers";
+import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { bindingDigest, coseSign, domain, encode, eventKeyAddress, hex, sha } from "../../src/codec.js";
 import { commitmentDigest, definitionDigest, evidenceRoot, inclusionPath, keySetDigest,
   observationDigest, operatorId } from "../../src/evidence.js";
@@ -109,28 +111,51 @@ const envelope = {
   observations: ordered.map(x => ({ observationDigest: x.digest, signedObservation: x.bytes.toString("base64") })),
 };
 const participants = ["A", "B", "C", "M1", "M2", "M3", "D"] as const;
+const attestationSeed = key("Alcor Ed25519 attestation");
+const credentialsPublicKey = hex0(ed25519.getPublicKey(attestationSeed));
+const canonical = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object")
+    return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
+  return JSON.stringify(value);
+};
 const credentials = participants.map((label, i) => {
   const challenge = sha(Buffer.from("Mizar challenge: " + label));
   const digest = bindingDigest(eventId, challenge);
   const signature = new SigningKey(hex0(key(label))).sign(hex0(digest)).serialized;
-  return {
+  const unsigned = {
     eventKey: hex0(pub(label)), eventKeyAddress: eventKeyAddress(pub(label)),
     nullifierHash: label.startsWith("M") ? "0x" + "ab".repeat(32) : hex0(sha(Buffer.from("Mizar nullifier: " + label))),
-    verifiedAt: from + i, challenge: hex0(challenge), appSignature: signature,
+    verifiedAt: new Date((from + i) * 1000).toISOString(), challenge: hex0(challenge), appSignature: signature,
     proofDigest: hex0(sha(Buffer.from("Mizar synthetic proof: " + label))),
-    attestation: "fixture-only-unverified-service-attestation",
   };
+  const message = Buffer.from("alcor/credential/v1\0" + canonical(unsigned));
+  return { ...unsigned, attestation: {
+    algorithm: "Ed25519" as const, publicKey: credentialsPublicKey,
+    signature: hex0(ed25519.sign(message, attestationSeed)),
+  } };
 });
 const params = {
   evaluatorVersion: "mizar-eval/1", eventId: hex0(eventId), chainId: 11155111,
   minPartners: 2, minWindowsPerPartner: 2,
+  credentialsPublicKey,
   evidenceSource: "envelopes.json", credentialsSource: "credentials.json",
   anchorBlocksSource: "anchor-blocks.json",
-  snapshot: { id: 1, cutoffBlock: 100 },
+  snapshot: { id: 1, cutoffBlock: 100, cutoffTimestamp: from + 10_001 },
+};
+const threeAddresses = ["A", "B", "C"].map(label => eventKeyAddress(pub(label)))
+  .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+const threeTree = StandardMerkleTree.of(threeAddresses.map(address => [address]), ["address"], { sortLeaves: true });
+const threeAddressVector = {
+  description: "Deterministic TEST VECTOR ONLY: OpenZeppelin StandardMerkleTree address leaves, default hash sorting",
+  addresses: threeAddresses, root: threeTree.root,
+  proofs: Object.fromEntries(threeAddresses.map((address, i) => [address, threeTree.getProof(i)])),
 };
 for (const [name, value] of Object.entries({
-  "envelopes.json": [envelope], "credentials.json": credentials,
+  "envelopes.json": [envelope], "credentials.json": { eventId: params.eventId, credentials },
   "anchor-blocks.json": { [commitmentHash]: 90 }, "params.json": params,
+  "merkle-3-address.json": threeAddressVector,
 })) writeFileSync(join(here, name), JSON.stringify(value, null, 2) + "\n");
 console.log(JSON.stringify({ fixture: here, observations: ordered.length, credentials: credentials.length,
   eventId: params.eventId, commitment: commitmentHash }));

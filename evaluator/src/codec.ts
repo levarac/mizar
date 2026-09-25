@@ -79,7 +79,14 @@ export function eventKeyAddress(pub: Uint8Array): string {
   const point = secp256k1.Point.fromBytes(bytes(pub, 33));
   return getAddress(keccak256(point.toBytes(false).subarray(1)).slice(-40));
 }
+export function appMessage(purpose: 1 | 2, eventId: Uint8Array, body: Uint8Array): Buffer {
+  if (body.length !== (purpose === 1 ? 32 : 72)) throw new Error("invalid app signature body");
+  return Buffer.concat([Buffer.from([0xff]), Buffer.from("beid/event-key-sign/v1"), Buffer.from([0, purpose]),
+    bytes(eventId, 32), Buffer.from(body)]);
+}
+export function appDigest(purpose: 1 | 2, eventId: Uint8Array, body: Uint8Array): Buffer {
+  return sha(appMessage(purpose, eventId, body));
+}
 export function bindingDigest(eventId: Uint8Array, challenge: Uint8Array): Buffer {
-  return sha(Buffer.concat([Buffer.from([0xff]), Buffer.from("beid/event-key-sign/v1"), Buffer.from([0, 1]),
-    bytes(eventId, 32), bytes(challenge, 32)]));
+  return appDigest(1, eventId, bytes(challenge, 32));
 }
