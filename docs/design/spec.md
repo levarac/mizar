@@ -53,14 +53,14 @@ The list carries no wallets. Only the first-verified key per nullifier counts (f
 
 ## Evaluation rule (evaluator)
 
-Input: the verification-envelope pages for the event, restricted to observations whose commitment is anchored at or before `cutoffBlock`, plus the credential list as of that block's timestamp.
+Input: the verification-envelope pages for the event, restricted to observations whose commitment is anchored at or before `cutoffBlock`, plus the credential list as of that block's timestamp. The envelope carries anchor sequence numbers and `committedAt`, not block numbers, so the evaluator maps each anchor to its block from the commitment registry's on-chain events. Until that mapping is available for a live run, snapshot evaluation fails closed with `UNAVAILABLE`; fixtures carry an explicit anchor-to-block mapping.
 
 1. Verify each observation's signature, context equality with the event ID, and Merkle inclusion. Drop and count the failures by reason.
 2. Derive reciprocal relations exactly as the evidence layer's mutual derivation does: group by (eventId, definitionDigest, enin), dedupe by observation digest, union the observed RPIDs per reporter RPID, and keep A–B only when each heard the other in the same enin.
 3. Map each reporter RPID to the event key that signed it as its own subject. Drop any RPID that more than one key claims as its own. Record every drop.
 4. Collapse relations to key pairs, keeping the set of distinct enins for each pair.
 5. A key is eligible when it is credentialed and has at least N distinct credentialed partner keys, each with at least B distinct enins. There is no iterative removal.
-6. Leaves: the OpenZeppelin standard Merkle tree over `[address eventKeyAddress]`, sorted by address. The root is the tree root.
+6. Leaves use OpenZeppelin `StandardMerkleTree.of([[address], ...], ["address"], { sortLeaves: true })`. The Solidity leaf is `keccak256(bytes.concat(keccak256(abi.encode(eventKeyAddress))))`, and internal pairs use the library's default commutative Keccak. The tree sorts leaves by leaf hash; `eligible.json` and the proof files are sorted by address for presentation only. The root is the tree root.
 
 Output directory:
 
@@ -72,7 +72,7 @@ Output directory:
 CLI:
 
 - `mizar evaluate --params p.json --out dir/`
-- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the on-chain root for that snapshot.
+- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the manifest's root. When both `--rpc` and `--contract` are given, it also compares with the root posted on-chain for that snapshot.
 - `mizar progress --params p.json --key <addr>` reads not-yet-anchored evidence and prints provisional progress. It is never used for claims.
 
 Evidence and the rule are reimplemented in this repository from the public specification of the evidence layer. Any logic ported from the pre-existing reference code is marked in the file header as ported.
@@ -118,11 +118,12 @@ Tests (Foundry):
 ## Human-check service
 
 - `POST /challenge {eventId}` returns `{challenge, expiresAt}`. The challenge is random, single-use and valid for 10 minutes.
-- `POST /bind {eventId, eventKey, challenge, appSignature}` verifies the purpose `0x01` signature and returns `{signal}`. The signal is `hashToField(keccak256(eventId ‖ eventKeyAddress ‖ challenge))`, following IDKit's signal rules.
-- `POST /verify {eventId, eventKey, idkitResult}` forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
+- `POST /rp-context {eventId}` returns the signed RP context that IDKit 4 requires, signed with the `WORLD_RP_SIGNING_KEY` binding.
+- `POST /bind {eventId, eventKey, challenge, appSignature}` verifies the purpose `0x01` signature and returns `{signal}`, where `signal = keccak256(eventId ‖ eventKeyAddress ‖ challenge)` as 32-byte hex. The page passes this value to IDKit unchanged; IDKit applies its own field hashing, so the service must not hash it again.
+- `POST /verify {eventId, eventKey, idkitResult}` first requires `idkitResult.signal_hash == hashSignal(signal)` using the pinned `@worldcoin/idkit-core` hashing helper, then forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
 - `GET /credentials?eventId=` returns the published credential list, including proof digests.
 
-Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
+Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_RP_SIGNING_KEY`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
 
 ## Pages
 
