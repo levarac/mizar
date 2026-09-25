@@ -271,10 +271,9 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
             const b = bytes(x, 17); if (b[0] !== 1) throw new Error("invalid_rpid"); return hex(b);
           });
           if (observed.some((x, j) => j > 0 && x <= observed[j - 1])) throw new Error("unsorted_observed_rpids");
-          if (p.get(4) !== null) {
-            if (!(p.get(4) instanceof Uint8Array)) throw new Error("invalid_rpid_claim");
-            throw new Error("delegation_unsupported");
-          }
+          // Opaque rpidClaim does not identify a different signer or prove delegation.
+          if (p.get(4) !== null && !(p.get(4) instanceof Uint8Array))
+            throw new Error("invalid_rpid_claim");
           if (p.get(5) !== null) bytes(p.get(5), 32);
           observations.push({ digest: declared, eventId: env.context, definitionDigest: admission.digest,
             observer: hex(observer), rpid: hex(rpid), enin: uint(p.get(2)), observed });
