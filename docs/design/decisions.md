@@ -141,3 +141,19 @@ This decision took two rounds.
 **Effect on the timing issue in D9.** Rolling snapshots during the test event's validity let the claim be demonstrated before submission, with no new event registration.
 
 **To verify.** How often the evidence layer anchors commitments; this bounds the latency of level 2. Level 1 needs reciprocity data from the evidence layer's live feed, so Mizar runs as a small always-on service as well as a CLI.
+
+## D11. Evidence verification without the committed bundle bytes (decided for the hackathon build, 2026-09-26)
+
+**Problem.** The evidence layer's public verification data returns `bundle: null` for each commitment. Its documentation says a verifier rebuilds the bundle from the observation bytes, but its reference verifier rejects `bundle: null`. The committed bundle also carries delegation certificates, which are not in the observation list, so the committed bundle digest cannot be rebuilt from this response alone.
+
+**Decision.** Mizar verifies what it needs without the bundle bytes:
+- the operator's signature on each commitment
+- the commitment's on-chain anchor binding
+- each observation's Merkle inclusion against the commitment's signed Merkle root
+- each observation's own signature
+
+It accepts only observations signed directly by their event key. Any observation that would need a delegation certificate is rejected with the reason `delegation_unsupported` and counted in `rejected.json`. The bundle digest check is out of scope for this build.
+
+**Why this is enough for Mizar.** Delegation certificates prove which keys may sign on behalf of others in the evidence layer. Mizar does not rely on that: an event key counts only after the distinct-human gate has bound it (D6), and relations are built only from observations those keys signed themselves.
+
+**Follow-up for the evidence layer.** Either return the bundle bytes, or state in its documentation that `bundle: null` cannot prove delegated provenance. This mismatch is reported to the evidence-layer maintainers.
