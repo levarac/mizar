@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { fileURLToPath } from "node:url";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { getBytes, recoverAddress, toBeHex, zeroPadValue } from "ethers";
+import { AbiCoder, getBytes, id, recoverAddress, toBeHex, zeroPadValue } from "ethers";
 import { appDigest, appMessage, eventKeyAddress, fromHex, hex, sha } from "../src/codec.js";
 import { verifyEvidence, type Envelope } from "../src/evidence.js";
 import { deriveRelations, evaluateRule, verifyCredentials, type CredentialList, type Parameters } from "../src/evaluate.js";
@@ -256,4 +258,73 @@ describe("CLI receipt", () => {
       expect(badInput.stdout).toContain('"fault":"invalid_signature"');
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 30_000);
+  it("compares root, manifestDigest and cutoffBlock with a fixture RootPosted event", async () => {
+    const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
+    const contract = "0x00000000000000000000000000000000000000c1";
+    let posted = { root: "", manifestDigest: "", cutoffBlock: params.snapshot.cutoffBlock };
+    let postedLogPresent = true;
+    // Offline JSON-RPC stub: answers only what verify needs to read one RootPosted log.
+    const server = createServer((req, res) => {
+      let body = "";
+      req.on("data", chunk => { body += chunk; });
+      req.on("end", () => {
+        const request = JSON.parse(body);
+        const answer = (r: { id: number; method: string }) => ({ jsonrpc: "2.0", id: r.id,
+          result: r.method === "eth_chainId" ? toBeHex(params.chainId)
+            : r.method === "eth_blockNumber" ? toBeHex(params.snapshot.cutoffBlock + 10)
+            : r.method === "eth_getLogs" ? !postedLogPresent ? [] : [{
+              address: contract, blockNumber: toBeHex(params.snapshot.cutoffBlock + 5),
+              blockHash: "0x" + "11".repeat(32), transactionHash: "0x" + "22".repeat(32),
+              transactionIndex: "0x0", logIndex: "0x0", removed: false,
+              topics: [id("RootPosted(uint64,bytes32,bytes32,uint64)"),
+                zeroPadValue(toBeHex(params.snapshot.id), 32)],
+              data: AbiCoder.defaultAbiCoder().encode(["bytes32", "bytes32", "uint64"],
+                [posted.root, posted.manifestDigest, posted.cutoffBlock]),
+            }] : null });
+        res.setHeader("content-type", "application/json");
+        res.end(JSON.stringify(Array.isArray(request) ? request.map(answer) : answer(request)));
+      });
+    });
+    await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
+    const rpc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    // Async spawn: spawnSync would block the stub server in this process.
+    const run = (...args: string[]) => new Promise<{ status: number | null; stdout: string }>(done => {
+      const child = spawn("pnpm", ["mizar", ...args], { cwd: root });
+      let stdout = "";
+      child.stdout.on("data", chunk => { stdout += chunk; });
+      child.on("close", status => done({ status, stdout }));
+    });
+    try {
+      const evaluated = await run("evaluate", "--params", "test/fixtures/params.json", "--out", out);
+      expect(evaluated.status).toBe(0);
+      const manifestPath = join(out, "manifest.json");
+      const receipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
+      const verifyOnChain = () => run("verify", "--manifest", manifestPath, "--rpc", rpc, "--contract", contract);
+      posted = { root: receipt.root, manifestDigest: receipt.manifestDigest, cutoffBlock: params.snapshot.cutoffBlock };
+      const pass = await verifyOnChain();
+      expect(pass.stdout).toContain('"result":"PASS"');
+      expect(pass.status).toBe(0);
+      const flip = (value: string) => value.slice(0, -1) + (parseInt(value.slice(-1), 16) ^ 1).toString(16);
+      for (const [change, reason] of [
+        [{ manifestDigest: flip(receipt.manifestDigest) }, "manifest_digest_mismatch"],
+        [{ cutoffBlock: params.snapshot.cutoffBlock + 1 }, "cutoff_block_mismatch"],
+        [{ root: flip(receipt.root) }, undefined],
+      ] as const) {
+        posted = Object.assign({ root: receipt.root, manifestDigest: receipt.manifestDigest,
+          cutoffBlock: params.snapshot.cutoffBlock }, change);
+        const failed = await verifyOnChain();
+        expect(failed.status).toBe(1);
+        expect(failed.stdout).toContain('"fault":"root_mismatch"');
+        if (reason) expect(failed.stdout).toContain(reason);
+      }
+      postedLogPresent = false;
+      const missing = await verifyOnChain();
+      expect(missing.status).toBe(2);
+      expect(missing.stdout).toContain('"result":"UNAVAILABLE"');
+      expect(missing.stdout).toContain("RootPosted event unavailable");
+    } finally {
+      server.close();
+      rmSync(out, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
