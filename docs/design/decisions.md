@@ -1,0 +1,108 @@
+# Design decisions
+
+A running log of how Mizar's design was reached during ETHGlobal Tokyo 2026, including options that were considered and dropped. Newest decisions are appended at the end. Status is one of **decided**, **proposed** (awaiting a maintainer decision), or **open**.
+
+Terms used below:
+
+- **Evidence layer**: the pre-existing system that collects signed BLE observations from attendees' phones, batches them into Merkle commitments, anchors the commitment digests on Sepolia, and serves the signed observations with inclusion proofs.
+- **Event key**: a secp256k1 key derived per device per event. It signs that device's observations and stays the same for the whole event, but it is not a permanent identity.
+- **RPID**: a rotating BLE identifier. An observation says "my RPID was X, and I heard RPIDs Y, Z in time window W".
+- **Time window (ENIN)**: a numbered slot of fixed length (300 s by default), declared by the observing device.
+- **Reciprocal relation**: within one time window, A heard B and B heard A. The evidence layer already defines a deterministic derivation for this.
+
+---
+
+## D1. Mizar is a separate layer and a separate repository (decided, 2026-09-25)
+
+**Context.** The evidence layer states that it does not decide whether an observation is true, score attendance, or issue anything.
+
+**Decision.** Mizar lives in its own repository and reads the evidence only through public interfaces: the commitment registry on Sepolia and the published verification data. Per-person checks live in a second repository, [Alcor](https://github.com/levarac/alcor), because they concern a different subject (one person at claim or join time) from Mizar's (a rule over everyone's evidence).
+
+**Why.** Evidence and interpretation are different layers. Keeping interpretation out of the evidence layer lets other evaluators, with other rules and other rewards, be built on the same evidence. It also keeps all hackathon code in public repositories, as the event rules require for new work.
+
+**Dropped.** Putting the evaluator inside the evidence layer's repository. That would mix the layers, and publishing that repository would first need a full history review.
+
+## D2. License: MIT (decided, 2026-09-25)
+
+**Options.** MIT, Apache-2.0 (adds an explicit patent grant and a patent-retaliation clause), MPL-2.0, AGPL-3.0. BUSL-1.1 was excluded because it is not an open-source license.
+
+**Decision.** MIT for both Mizar and Alcor.
+
+**Why.** The team's existing public SDK is MIT, so one license keeps later code moves simple. Identity and attestation infrastructure is overwhelmingly MIT in practice: OpenZeppelin Contracts, ENS contracts, EAS contracts, World ID contracts and IDKit, and Semaphore all use it. Apache-2.0's patent terms matter most for projects with their own patents or many outside contributors, which does not apply here yet.
+
+## D3. What a claim gives the claimant (decided, 2026-09-26)
+
+**Options.**
+- (A) A non-transferable participation record, one per person per event.
+- (B) A share of a reward pool, sized by evaluation.
+- (C) Pairwise "we met" records.
+
+**Decision.** (A).
+
+**Why.** It is the smallest step from an evidence layer that deliberately issues nothing. It also keeps the evaluation a yes/no question. (B) raises the incentive to cheat and demands stricter checks. (C) publishes pairwise meetings by design. A reward can be layered on top of (A) later.
+
+## D4. What the record claims, and what it does not (decided, 2026-09-26)
+
+**Decision.** The record claims: *"a verified distinct human who had reciprocal observations with at least N other verified humans, each across at least B time windows, at event X"*. It is not called proof of attendance or proof of presence.
+
+**Why.** Observations are signed by software, and time windows are self-declared, so a device can claim anything about itself. BLE can be relayed. The evidence layer itself states that a reciprocal relation proves neither truth, proximity, presence, attendance, unique hardware, nor a unique person. The name must not promise more than the evidence supports.
+
+## D5. The evaluation rule (proposed, 2026-09-26)
+
+This decision took two rounds.
+
+**Round 1 options.**
+1. At least N distinct reciprocal partners.
+2. As in 1, plus at least M distinct time windows.
+3. A human-gated graph: only edges whose ends are both verified humans count.
+4. Trust seeded from physical anchors and propagated over edges (SybilRank-like).
+5. Optimistic settlement with a challenge game.
+
+**Round 1 outcome: a human-gated 2-core.** Vertices are event keys that passed the distinct-human check. Edges are reciprocal relations mapped to keys. Vertices with fewer than 2 partners are removed repeatedly. Two independent reviews agreed on the core insight: event keys can be generated in software and time windows are self-declared, so options 1 and 2 give no sybil resistance by themselves, and all of it comes from the human gate. Option 4 was dropped for this build: venue broadcasts do not appear in participants' published evidence, the venue device holds no key, and a static signed broadcast can be replayed.
+
+**Round 2: switch to a per-counterpart threshold, not iterative.** An eligible key needs at least N distinct verified partner keys, and each of those partners must reciprocate in at least B distinct time windows. No iterative removal.
+
+**Why round 2 changed the answer.**
+- **False negatives are the launch-blocking metric.** Field measurements from earlier pilots (3 real events, 43 devices) put the honest pass rate at 81 / 72 / 65 / 51 / 44 % for N = 1..5. The dominant causes were app permissions, UX, and a silent reporting layer, not radio: one device was detected 75 times by others but never reported. Iterative removal cascades: an honest person whose partner fails is removed, which can remove more honest people. It buys almost nothing against colluding groups, which pass either way.
+- **Time windows raise relay cost even though they do not stop sybils.** In a relay attack, one end is an honest phone that declares honest time windows. The relay therefore has to be held with each counterpart across B windows. Counting windows in total rather than per counterpart was rejected earlier for this reason: it lets a lone relay qualify for roughly B + (N − 1) windows.
+- **B is a parameter.** Every measured pass rate is at B = 1. For the demo the event definition uses a shorter window (for example 60 s) so that B = 2 fits in minutes, and a B = 1 definition is kept as a fallback.
+
+**Extra rule: RPID squatting.** The reciprocal derivation pairs RPIDs, not keys. A fake key could sign someone else's RPID as its own and inherit their relations. Any RPID that more than one key signs as its own is dropped before mapping relations to keys.
+
+**Parameters are fixed before the event** (N, B, the evidence cutoff block, and the claim window), so they cannot be tuned after seeing the data.
+
+## D6. The distinct-human gate (proposed, 2026-09-26)
+
+**Decision.** Alcor verifies each event key once with World ID. The proof's signal is bound to (eventId, eventKey), and the evaluator accepts only one key per World ID nullifier. The gate is an interface: a desk-issued credential over the event key is an alternative gate with a different trust point.
+
+**Open: when to verify.**
+- **At join**, after the first observation. Partners who never claim still count as verified. This removes a class of false negatives.
+- **At claim**. Simpler to build, but only claimants can serve as verified partners.
+
+**Known limit.** World ID 4.0 has no on-chain verifier on Ethereum Sepolia, so a third party cannot re-verify the proofs Alcor accepted, and Alcor is a trusted attester in this build. Mitigations: bind the signal to the event key, publish the proof bundles, and sign each verification result. **Open:** the legacy World ID router that exists on Sepolia could verify on-chain but assumes Orb-level credentials. Whether it is usable for the demo is unchecked.
+
+**Why World and the evidence layer complement each other.** World ID provides uniqueness, one human, but no context: where the person was and whom they met. The evidence layer provides context, who reciprocally observed whom in which time window, but cannot tell one person with N phones from N people. Uniqueness also removes the evidence layer's cold-start problem, because even a small event gets sybil resistance without relying on crowd size. In return, the evidence raises the cost of using a borrowed World ID remotely, since that needs relayed BLE sessions with honest attendees.
+
+## D7. Settlement and verification (proposed, 2026-09-26)
+
+**Decision.**
+- After the claim window closes, a deterministic, versioned off-chain program evaluates the rule.
+- The event's registered authority posts the eligible Merkle root and the digest of the input manifest to a claim contract on Sepolia.
+- Each eligible person claims with a Merkle proof and a signature by their event key over (eventId, recipient, claim contract, chainId). The contract then calls EAS directly. The schema has no resolver and is non-revocable, so the claim contract is the attester and the recipient is the claimant's wallet.
+- A public CLI and CI job recompute the result from the published inputs and return a receipt: PASS, FAIL (root mismatch, invalid signature, or threshold miscalculation), or UNAVAILABLE.
+
+**Why.** This makes the result publicly auditable within the time available. It is not trustless: a Merkle proof shows membership in the posted root, not that the root was computed honestly. Recomputation is what catches a dishonest root. A challenge game or an on-chain dispute mechanism would only add protection if it were enforceable, so it is left for later.
+
+## D8. Privacy (proposed, 2026-09-26)
+
+**Tension.** Public recomputation needs the event-key-to-wallet link for every claimant. Reciprocal relations between event keys are already public in the evidence layer, so publishing this link also reveals who met whom among claimants' wallets.
+
+**Proposal.** Claiming is opt-in with an explicit notice of what becomes public, and the claim flow recommends a fresh wallet used only for claims. Anonymous claiming, which proves "my key is in the eligible set" without revealing which key (Semaphore v4 is deployed on Sepolia), is future work. It needs separate commitment enrollment and removal of the public wallet-to-key link.
+
+## Out of scope for the hackathon build
+
+- Relief for honest attendees whose own reports are silent but who were observed by others. This needs a binding from RPID to owner key that does not exist yet. It would be issued as a separate, clearly marked class.
+- Trust propagation from venue anchors.
+- A challenge game, bonds, or bounties.
+- On-chain World ID verification.
+- Anonymous claims.
