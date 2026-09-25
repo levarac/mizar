@@ -52,8 +52,7 @@ contract MizarClaimTest {
     Vm internal constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
     uint256 internal constant KEY = 0xA11CE;
     uint256 internal constant OTHER_KEY = 0xB0B;
-    uint256 internal constant SECP256K1_N =
-        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+    uint256 internal constant SECP256K1_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
     bytes32 internal constant EVENT_ID = keccak256("test-event");
     bytes32 internal constant SCHEMA_UID = keccak256("test-schema");
     bytes32 internal constant MANIFEST = keccak256("test-manifest");
@@ -73,14 +72,18 @@ contract MizarClaimTest {
 
     function testValidClaimAttestsRecipientAndData() public {
         _postLeaf(1, eventKey);
-        bytes32 uid = claimContract.claim(1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT));
+        bytes32 uid = claimContract.claim(
+            1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT)
+        );
         require(uid == mockEAS.uid(), "wrong UID");
         require(mockEAS.calls() == 1, "missing attestation");
         require(mockEAS.schema() == SCHEMA_UID, "wrong schema");
         require(mockEAS.recipient() == RECIPIENT, "wrong recipient");
         require(mockEAS.expirationTime() == 0 && !mockEAS.revocable(), "wrong revocation settings");
         require(mockEAS.refUID() == bytes32(0) && mockEAS.value() == 0, "wrong EAS references/value");
-        require(keccak256(mockEAS.data()) == keccak256(abi.encode(EVENT_ID, eventKey, uint64(1), MANIFEST)), "wrong data");
+        require(
+            keccak256(mockEAS.data()) == keccak256(abi.encode(EVENT_ID, eventKey, uint64(1), MANIFEST)), "wrong data"
+        );
     }
 
     function testValidClaimWithSiblingProof() public {
@@ -94,7 +97,9 @@ contract MizarClaimTest {
         claimContract.postRoot(1, root, MANIFEST, 100);
         bytes32[] memory proof = new bytes32[](1);
         proof[0] = siblingLeaf;
-        claimContract.claim(1, eventKey, proof, RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT));
+        claimContract.claim(
+            1, eventKey, proof, RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT)
+        );
         require(mockEAS.calls() == 1, "sibling proof not accepted");
     }
 
@@ -129,7 +134,9 @@ contract MizarClaimTest {
 
     function testSecondClaimRevertsAcrossSnapshots() public {
         _postLeaf(1, eventKey);
-        claimContract.claim(1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT));
+        claimContract.claim(
+            1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT)
+        );
         _postLeaf(2, eventKey);
         bytes memory signature = _signature(KEY, block.chainid, address(claimContract), RECIPIENT);
         vm.expectRevert(MizarClaim.AlreadyClaimed.selector);
@@ -172,7 +179,10 @@ contract MizarClaimTest {
         address vectorKey = vm.parseJsonAddress(json, ".eventKeyAddress");
         bytes32 vectorDigest = vm.parseJsonBytes32(json, ".claim.digest");
         bytes memory vectorSignature = vm.parseJsonBytes(json, ".claim.signature");
-        require(_digest(vectorEventId, 11155111, vectorContractAddress, vectorRecipient) == vectorDigest, "golden digest mismatch");
+        require(
+            _digest(vectorEventId, 11155111, vectorContractAddress, vectorRecipient) == vectorDigest,
+            "golden digest mismatch"
+        );
 
         MizarClaim implementation = new MizarClaim(IEAS(address(mockEAS)), SCHEMA_UID, vectorEventId, POSTER);
         vm.etch(vectorContractAddress, address(implementation).code);
@@ -192,13 +202,24 @@ contract MizarClaimTest {
         vm.createSelectFork(rpc);
         IEAS eas = IEAS(0xC2679fBD37d54388Ce493F1DB75320D236e1815e);
         ISchemaRegistry registry = ISchemaRegistry(0x0a7E2Ff54e76B8E6659aedc9103FB21c038050D0);
-        bytes32 schema = registry.register("bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest", ISchemaResolver(address(0)), false);
+        require(block.chainid == 11155111, "not Sepolia");
+        require(address(eas).code.length > 0 && address(registry).code.length > 0, "Sepolia EAS deployment missing");
+        bytes32 schema = registry.register(
+            "bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest",
+            ISchemaResolver(address(0)),
+            false
+        );
         MizarClaim forkClaim = new MizarClaim(eas, schema, EVENT_ID, POSTER);
         vm.prank(POSTER);
         forkClaim.postRoot(1, _leaf(eventKey), MANIFEST, 100);
-        bytes32 uid = forkClaim.claim(1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(forkClaim), RECIPIENT));
+        bytes32 uid = forkClaim.claim(
+            1, eventKey, _emptyProof(), RECIPIENT, _signature(KEY, block.chainid, address(forkClaim), RECIPIENT)
+        );
         Attestation memory attestation = eas.getAttestation(uid);
-        require(attestation.recipient == RECIPIENT && attestation.attester == address(forkClaim), "fork EAS attestation mismatch");
+        require(
+            attestation.recipient == RECIPIENT && attestation.attester == address(forkClaim),
+            "fork EAS attestation mismatch"
+        );
         require(attestation.schema == schema && !attestation.revocable, "fork EAS schema mismatch");
     }
 
@@ -215,11 +236,29 @@ contract MizarClaimTest {
         return new bytes32[](0);
     }
 
-    function _digest(bytes32 eventId, uint256 chainId, address contractAddress, address recipient) internal pure returns (bytes32) {
-        return sha256(abi.encodePacked(bytes1(0xff), "beid/event-key-sign/v1", bytes1(0), uint8(2), eventId, chainId, contractAddress, recipient));
+    function _digest(bytes32 eventId, uint256 chainId, address contractAddress, address recipient)
+        internal
+        pure
+        returns (bytes32)
+    {
+        return sha256(
+            abi.encodePacked(
+                bytes1(0xff),
+                "beid/event-key-sign/v1",
+                bytes1(0),
+                uint8(2),
+                eventId,
+                chainId,
+                contractAddress,
+                recipient
+            )
+        );
     }
 
-    function _signature(uint256 key, uint256 chainId, address contractAddress, address recipient) internal returns (bytes memory) {
+    function _signature(uint256 key, uint256 chainId, address contractAddress, address recipient)
+        internal
+        returns (bytes memory)
+    {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, _digest(EVENT_ID, chainId, contractAddress, recipient));
         return abi.encodePacked(r, s, v);
     }

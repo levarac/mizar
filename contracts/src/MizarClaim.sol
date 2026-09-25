@@ -72,14 +72,21 @@ contract MizarClaim {
     function _claimDigest(address recipient) private view returns (bytes32) {
         return sha256(
             abi.encodePacked(
-                bytes1(0xff), "beid/event-key-sign/v1", bytes1(0), uint8(2),
-                eventId, block.chainid, address(this), recipient
+                bytes1(0xff),
+                "beid/event-key-sign/v1",
+                bytes1(0),
+                uint8(2),
+                eventId,
+                block.chainid,
+                address(this),
+                recipient
             )
         );
     }
 
     function _attest(uint64 snapshotId, address eventKeyAddress, address recipient, bytes32 manifestDigest)
-        private returns (bytes32)
+        private
+        returns (bytes32)
     {
         return eas.attest(
             AttestationRequest({
