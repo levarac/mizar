@@ -131,7 +131,7 @@ Tests (Foundry):
 - `POST /challenge {eventId}` returns `{challenge, expiresAt}`. The challenge is random, single-use and valid for 10 minutes.
 - `POST /rp-context {eventId}` returns the signed RP context that IDKit 4 requires, signed with the `WORLD_RP_SIGNING_KEY` binding.
 - `POST /bind {eventId, eventKey, challenge, appSignature}` verifies the purpose `0x01` signature and returns `{signal}`, where `signal = keccak256(eventId ‖ eventKeyAddress ‖ challenge)` as 32-byte hex. The page passes this value to IDKit unchanged; IDKit applies its own field hashing, so the service must not hash it again.
-- `POST /verify {eventId, eventKey, idkitResult}` first requires `idkitResult.signal_hash == hashSignal(signal)` using the pinned `@worldcoin/idkit-core` hashing helper, then forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
+- `POST /verify {eventId, eventKey, challenge, idkitResult}` looks up the exact bound `(eventId, eventKey, challenge)` row, rejects an expired or already consumed challenge both before and after World verification, compares the proof's signal with that row's signal, then requires `idkitResult.signal_hash == hashSignal(signal)` using the pinned `@worldcoin/idkit-core` hashing helper, then forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
 - `GET /credentials?eventId=` returns the published credential list, including proof digests.
 
 Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_RP_SIGNING_KEY`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
@@ -144,7 +144,7 @@ Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `W
   3. Receive the callback fragment (`sig`, `k`, `a`, `st`).
   4. `/bind`.
   5. IDKit.
-  6. `/verify`.
+  6. `/verify`, sending the saved challenge.
 
   Keep state in `localStorage`, because the callback may open a new tab.
 - **Claim page**, on Mizar's origin:
