@@ -60,7 +60,7 @@ Input: the verification-envelope pages for the event, restricted to observations
 3. Map each reporter RPID to the event key that signed it as its own subject. Drop any RPID that more than one key claims as its own. Record every drop.
 4. Collapse relations to key pairs, keeping the set of distinct enins for each pair.
 5. A key is eligible when it is credentialed and has at least N distinct credentialed partner keys, each with at least B distinct enins. There is no iterative removal.
-6. Leaves: the OpenZeppelin standard Merkle tree over `[address eventKeyAddress]`, sorted by address. The root is the tree root.
+6. Leaves use OpenZeppelin `StandardMerkleTree.of([[address], ...], ["address"], { sortLeaves: true })`. The Solidity leaf is `keccak256(bytes.concat(keccak256(abi.encode(eventKeyAddress))))`, and internal pairs use the library's default commutative Keccak. The tree sorts leaves by leaf hash; `eligible.json` and the proof files are sorted by address for presentation only. The root is the tree root.
 
 Output directory:
 
@@ -72,7 +72,7 @@ Output directory:
 CLI:
 
 - `mizar evaluate --params p.json --out dir/`
-- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the on-chain root for that snapshot.
+- `mizar verify --manifest <path|url> [--rpc <url> --contract <addr>]` prints a receipt: `{"result":"PASS"}`, `{"result":"FAIL","fault":"root_mismatch|invalid_signature|threshold_miscalculation"}`, or `{"result":"UNAVAILABLE","reason":…}`. It recomputes from the inputs and compares the result with the manifest's root. When both `--rpc` and `--contract` are given, it also compares with the root posted on-chain for that snapshot.
 - `mizar progress --params p.json --key <addr>` reads not-yet-anchored evidence and prints provisional progress. It is never used for claims.
 
 Evidence and the rule are reimplemented in this repository from the public specification of the evidence layer. Any logic ported from the pre-existing reference code is marked in the file header as ported.
