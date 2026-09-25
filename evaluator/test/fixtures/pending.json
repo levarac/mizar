@@ -1,0 +1,6 @@
+{
+  "kind": "synthetic-pending-fixture",
+  "eventId": "0x9640b46efa4c89cedf27e852e79e424f0cfa330d77b14fe77e478c784f1bc4dd",
+  "evidenceSource": "envelopes.json",
+  "anchorBlocksSource": "anchor-blocks.json"
+}

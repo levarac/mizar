@@ -1,0 +1,22 @@
+{
+  "description": "Deterministic TEST VECTOR ONLY: OpenZeppelin StandardMerkleTree address leaves, default hash sorting",
+  "addresses": [
+    "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+    "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+    "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F"
+  ],
+  "root": "0xadad4040c18fafa3fd40fa142d1697b736f0c0b95050ba66ad302f0d2373d8a2",
+  "proofs": {
+    "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De": [
+      "0x7104ea3210fc9d3b6ac26f0820ac8309fa7f5c3e3ffe28c38140a2222aae3108",
+      "0x8fee7e7bd0c55b3a89bb0992bf2c196efdd5f057e5ba0ffa6f909762c8e3fed1"
+    ],
+    "0x78488fB96739A6188E7de7219ca0D11e3869b738": [
+      "0x4216d3fa266912c0c5d482dcbcfd1c704a86917378021af77913b415f54fbffd"
+    ],
+    "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F": [
+      "0x82f9dff7a2daab2ccbd6bef037469c5d815f1240ee90c454e2b082e56f5a2f02",
+      "0x8fee7e7bd0c55b3a89bb0992bf2c196efdd5f057e5ba0ffa6f909762c8e3fed1"
+    ]
+  }
+}
