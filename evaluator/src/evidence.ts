@@ -84,6 +84,62 @@ function verifyPath(digest: string, index: number, size: number, path: Buffer[],
 }
 function same(a: Uint8Array, b: string) { return hex(a) === b.toLowerCase().replace(/^0x/, ""); }
 function addressWord(value: string): string { return AbiCoder.defaultAbiCoder().encode(["address"], [value]); }
+function coalescePages(pages: Envelope[]): Envelope[] {
+  if (pages.length === 1) {
+    if (pages[0].page.nextCursor !== null ||
+        pages[0].commitments.some(c => c.nextObservationCursor !== null))
+      throw new Error("incomplete envelope pagination");
+    return pages;
+  }
+  const first = pages[0];
+  const merged: Envelope = structuredClone(first);
+  merged.page = { ...first.page, nextCursor: null };
+  merged.commitments = [];
+  merged.observations = [];
+  const commitments = new Map<string, Envelope["commitments"][number]>();
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i], next = pages[i + 1];
+    if (page.version !== first.version || page.context !== first.context ||
+        JSON.stringify(page.admission) !== JSON.stringify(first.admission) ||
+        page.operatorPublicKey !== first.operatorPublicKey)
+      throw new Error("envelope admission changed across pages");
+    const continuing = page.commitments.some(c => c.nextObservationCursor !== null);
+    if ((continuing || page.page.nextCursor !== null) && !next)
+      throw new Error("incomplete envelope pagination");
+    if (continuing && (page.commitments.length !== 1 || page.page.nextCursor !== null ||
+        next!.page.cursor !== page.page.cursor ||
+        next!.commitments[0]?.anchor.commitmentDigest !== page.commitments[0].anchor.commitmentDigest))
+      throw new Error("invalid observation continuation");
+    if (!continuing && page.page.nextCursor !== null &&
+        next!.page.cursor !== page.page.nextCursor)
+      throw new Error("invalid commitment continuation");
+    for (const item of page.commitments) {
+      const digest = item.anchor.commitmentDigest;
+      const previous = commitments.get(digest);
+      if (previous) {
+        if (previous.signedCommitment !== item.signedCommitment ||
+            JSON.stringify(previous.anchor) !== JSON.stringify(item.anchor))
+          throw new Error("commitment changed across pages");
+        previous.inclusions.push(...item.inclusions);
+        previous.nextObservationCursor = item.nextObservationCursor;
+      } else {
+        const copy = structuredClone(item);
+        commitments.set(digest, copy);
+        merged.commitments.push(copy);
+      }
+    }
+    merged.observations.push(...page.observations);
+  }
+  if (merged.commitments.some(c => c.nextObservationCursor !== null))
+    throw new Error("incomplete envelope pagination");
+  for (let i = 1; i < merged.commitments.length; i++) {
+    const before = merged.commitments[i - 1].anchor, after = merged.commitments[i].anchor;
+    if (after.sequence !== before.sequence + 1 ||
+        after.previousCommitmentDigest !== before.commitmentDigest)
+      throw new Error("commitment anchor chain mismatch");
+  }
+  return [merged];
+}
 function verifyAdmission(env: Envelope, eventId: string) {
   const admission = env.admission;
   const keySetBytes = b64(admission.encodedKeySet);
@@ -128,6 +184,7 @@ function verifyAdmission(env: Envelope, eventId: string) {
 export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: number,
   anchorBlocks: Record<string, number>): EvidenceResult {
   if (!pages.length) throw new Error("no envelope pages");
+  pages = coalescePages(pages);
   const observations: Observation[] = [], invalid: InvalidObservation[] = [];
   const inputDigests: string[] = [], commitmentDigests: string[] = [];
   const blocks: number[] = [];
@@ -135,10 +192,13 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
   for (const env of pages) {
     if (env.version !== 1 || env.context !== eventId.replace(/^0x/, "").toLowerCase())
       throw new Error("envelope event mismatch");
-    if (env.page.nextCursor !== null || env.commitments.some(c => c.nextObservationCursor !== null))
-      throw new Error("incomplete envelope pagination");
     const admission = verifyAdmission(env, eventId);
     const byDigest = new Map(env.observations.map(o => [o.observationDigest, o]));
+    if (byDigest.size !== env.observations.length) throw new Error("duplicate envelope Observation");
+    const declaredInclusions = env.commitments.flatMap(c => c.inclusions.map(i => i.observationDigest));
+    if (declaredInclusions.length !== byDigest.size ||
+        declaredInclusions.some(digest => !byDigest.has(digest)))
+      throw new Error("envelope observations do not match inclusions");
     for (const item of env.commitments) {
       const signed = b64(item.signedCommitment);
       const digest = commitmentDigest(signed);
@@ -157,6 +217,10 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
           uint(c.get(11)) < admission.validFrom || item.anchor.committedAt > admission.validUntil)
         throw new Error("invalid signed commitment");
       const count = uint(c.get(8)), root = bytes(c.get(7), 32);
+      if (count < 1) throw new Error("empty commitment is invalid");
+      if (item.anchor.sequence === 1 &&
+          item.anchor.previousCommitmentDigest !== "00".repeat(32))
+        throw new Error("invalid first commitment anchor");
       if (count !== item.inclusions.length) throw new Error("incomplete commitment inclusions");
       const ordered: string[] = new Array(count);
       for (const inc of item.inclusions) {
@@ -172,6 +236,8 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
       }
       if (ordered.some(x => x === undefined) || !evidenceRoot(ordered).equals(root))
         throw new Error("commitment Merkle root mismatch");
+      if (ordered.some((x, i) => i > 0 && x <= ordered[i - 1]))
+        throw new Error("bundle observations not sorted by digest");
       const signedObservations = ordered.map(d => {
         const o = byDigest.get(d);
         if (!o) throw new Error("missing envelope Observation");
@@ -183,6 +249,8 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
       ]));
       if (!sha(rebuilt).equals(bytes(c.get(9), 32)) || rebuilt.length !== uint(c.get(10)))
         throw new Error("commitment bundle mismatch");
+      if (item.bundle !== null && !b64(item.bundle).equals(rebuilt))
+        throw new Error("provided bundle differs from reconstructed bundle");
       for (let i = 0; i < ordered.length; i++) {
         const declared = ordered[i], signedObservation = signedObservations[i];
         if (seen.has(declared)) throw new Error("duplicate Observation digest");

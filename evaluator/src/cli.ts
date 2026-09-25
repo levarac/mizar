@@ -1,10 +1,10 @@
 import { readFile, mkdir, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { JsonRpcProvider, id } from "ethers";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { evaluateRule, type CredentialList, type Parameters } from "./evaluate.js";
 import { verifyEvidence, type Envelope } from "./evidence.js";
-import { digestBytes, loadEnvelopes, readSource, writeJson } from "./io.js";
+import { digestBytes, loadEnvelopes, readSource, sourcePath, writeJson } from "./io.js";
+import { checkAdmissionRegistries, readAnchorsFromRegistry, readPostedRoot } from "./chain.js";
 
 type Args = Record<string, string>;
 function argsOf(input: string[]): Args {
@@ -17,12 +17,28 @@ function argsOf(input: string[]): Args {
 }
 async function inputs(paramsFile: string) {
   const paramsPath = resolve(paramsFile), base = dirname(paramsPath);
-  const paramsBytes = await readFile(paramsPath);
+  let paramsBytes = await readFile(paramsPath);
   const params = JSON.parse(paramsBytes.toString()) as Parameters;
+  const live = sourcePath(params.evidenceSource, base).startsWith("https://");
+  if (live && (!params.rpcUrl || !params.eventRegistry ||
+      !params.definitionRegistry || !params.commitmentRegistry))
+    throw new Error("live snapshot requires RPC and all three registry addresses");
   const pages = await loadEnvelopes(params.evidenceSource, base, params.eventId);
   const evidenceBytes = Buffer.from(JSON.stringify(pages, null, 2) + "\n");
   const credentialBytes = await readSource(params.credentialsSource, base);
-  const anchorBytes = await readSource(params.anchorBlocksSource, base);
+  let anchorBytes: Buffer;
+  if (live) {
+    await checkAdmissionRegistries(params.rpcUrl!, params.chainId, params.eventRegistry!,
+      params.definitionRegistry!, params.eventId, params.snapshot.cutoffBlock, pages);
+    const anchored = await readAnchorsFromRegistry(params.rpcUrl!, params.commitmentRegistry!,
+      params.eventId, params.chainId, params.snapshot.cutoffBlock, pages);
+    params.snapshot.cutoffTimestamp = anchored.cutoffTimestamp;
+    paramsBytes = Buffer.from(JSON.stringify(params, null, 2) + "\n");
+    anchorBytes = Buffer.from(JSON.stringify(anchored.mapping, null, 2) + "\n");
+  } else {
+    if (!params.anchorBlocksSource) throw new Error("missing trusted anchor block mapping");
+    anchorBytes = await readSource(params.anchorBlocksSource, base);
+  }
   return { params, paramsBytes, evidenceBytes, credentialBytes, anchorBytes,
     pages, credentials: JSON.parse(credentialBytes.toString()) as CredentialList,
     anchorBlocks: JSON.parse(anchorBytes.toString()) as Record<string, number> };
@@ -71,15 +87,18 @@ async function evaluate(paramsFile: string, out: string) {
     invalidObservations: evaluation.invalidObservations.length, out: dir }));
 }
 async function verify(manifestPath: string, rpc?: string, contract?: string) {
-  const path = resolve(manifestPath), dir = dirname(path);
+  const remote = manifestPath.startsWith("https://");
+  const path = remote ? manifestPath : resolve(manifestPath);
+  const dir = remote ? new URL(".", path).toString() : dirname(path);
+  const readRelative = (name: string) => readSource(name, dir);
   let manifest: any;
-  try { manifest = JSON.parse((await readFile(path)).toString()); }
+  try { manifest = JSON.parse((await readSource(path, process.cwd())).toString()); }
   catch (error) { console.log(JSON.stringify({ result: "UNAVAILABLE", reason: String(error) })); return 2; }
   try {
     const readInput = async (name: string) => {
       const descriptor = manifest.inputs[name];
       if (!/^inputs\/[a-z-]+\.json$/.test(descriptor.path)) throw new Error("unsafe manifest input path");
-      const b = await readFile(join(dir, descriptor.path));
+      const b = await readRelative(descriptor.path);
       if (digestBytes(b) !== descriptor.sha256) throw new Error(`input digest mismatch: ${name}`);
       return b;
     };
@@ -88,8 +107,9 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
     const params = JSON.parse(paramsBytes.toString()) as Parameters;
     if (JSON.stringify(params) !== JSON.stringify(manifest.parameters))
       throw new Error("parameters altered");
-    const evidence = verifyEvidence(JSON.parse(evidenceBytes.toString()) as Envelope[],
-      params.eventId, params.snapshot.cutoffBlock, JSON.parse(anchorBytes.toString()));
+    const pages = JSON.parse(evidenceBytes.toString()) as Envelope[];
+    const archiveMap = JSON.parse(anchorBytes.toString());
+    const evidence = verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, archiveMap);
     const evaluation = evaluateRule(params, evidence, JSON.parse(credentialBytes.toString()));
     if (evaluation.root.toLowerCase() !== String(manifest.root).toLowerCase()) {
       console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch" })); return 1;
@@ -105,51 +125,94 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
     if (digestBytes(Buffer.from(JSON.stringify(eligible))) !== manifest.outputDigests.eligible ||
         digestBytes(Buffer.from(JSON.stringify(rejected))) !== manifest.outputDigests.rejected)
       throw new Error("threshold output mismatch");
-    const savedEligible = JSON.parse((await readFile(join(dir, "eligible.json"))).toString());
-    const savedRejected = JSON.parse((await readFile(join(dir, "rejected.json"))).toString());
+    const savedEligible = JSON.parse((await readRelative("eligible.json")).toString());
+    const savedRejected = JSON.parse((await readRelative("rejected.json")).toString());
     if (JSON.stringify(savedEligible) !== JSON.stringify(eligible) ||
         JSON.stringify(savedRejected) !== JSON.stringify(rejected))
       throw new Error("threshold output mismatch");
     for (const [address, proof] of Object.entries(evaluation.proofs)) {
-      const saved = JSON.parse((await readFile(join(dir, "proofs", address.toLowerCase() + ".json"))).toString());
+      const saved = JSON.parse((await readRelative("proofs/" + address.toLowerCase() + ".json")).toString());
       if (JSON.stringify(saved.proof) !== JSON.stringify(proof) ||
           !StandardMerkleTree.verify(evaluation.root, ["address"], [address], saved.proof))
         throw new Error("proof mismatch");
     }
     if (rpc || contract) {
       if (!rpc || !contract) throw new Error("both --rpc and --contract required");
-      const provider = new JsonRpcProvider(rpc, params.chainId);
-      const data = id("roots(uint64)").slice(0, 10) +
-        BigInt(params.snapshot.id).toString(16).padStart(64, "0");
-      const result = await provider.call({ to: contract, data });
-      if (result.length < 66) throw new Error("contract roots(uint64) unavailable");
-      if (result.slice(0, 66).toLowerCase() !== evaluation.root.toLowerCase()) {
+      if (params.eventRegistry && params.definitionRegistry)
+        await checkAdmissionRegistries(rpc, params.chainId, params.eventRegistry,
+          params.definitionRegistry, params.eventId, params.snapshot.cutoffBlock, pages);
+      if (params.commitmentRegistry) {
+        const chain = await readAnchorsFromRegistry(rpc, params.commitmentRegistry,
+          params.eventId, params.chainId, params.snapshot.cutoffBlock, pages);
+        if (JSON.stringify(chain.mapping) !== JSON.stringify(archiveMap) ||
+            chain.cutoffTimestamp !== params.snapshot.cutoffTimestamp)
+          throw new Error("archived anchor block mapping differs from chain");
+      }
+      const posted = await readPostedRoot(rpc, contract, params.chainId,
+        params.snapshot.id, params.snapshot.cutoffBlock);
+      if (posted.cutoffBlock !== params.snapshot.cutoffBlock)
+        throw new Error("on-chain cutoff block mismatch");
+      if (posted.root.toLowerCase() !== evaluation.root.toLowerCase()) {
         console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch" })); return 1;
       }
     }
     console.log(JSON.stringify({ result: "PASS" })); return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
+    if (/fetch failed|HTTP \d{3}|ENOENT|missing trusted anchor block mapping|RootPosted event unavailable|cutoff block unavailable|registration unavailable|definition anchor unavailable|network|timeout/i.test(message)) {
+      console.log(JSON.stringify({ result: "UNAVAILABLE", reason: message })); return 2;
+    }
     const fault = /signature|digest mismatch|bundle mismatch|Merkle inclusion|COSE|anchor|CBOR/i.test(message)
       ? "invalid_signature" : "threshold_miscalculation";
     console.log(JSON.stringify({ result: "FAIL", fault, reason: message })); return 1;
   }
 }
-async function progress(paramsFile: string, key: string) {
-  const i = await inputs(paramsFile), { evaluation } = resultFor(i);
+async function progress(paramsFile: string, key: string, pendingArg?: string) {
+  const path = resolve(paramsFile), base = dirname(path);
+  const params = JSON.parse((await readFile(path)).toString()) as Parameters;
+  const pendingSource = pendingArg ?? params.pendingSource;
+  if (!pendingSource) {
+    console.log(JSON.stringify({ result: "UNAVAILABLE", reason: "pending evidence source is not configured" }));
+    return 2;
+  }
+  let evaluation: ReturnType<typeof evaluateRule>;
+  try {
+    const pendingPath = sourcePath(pendingSource, base);
+    const pending = JSON.parse((await readSource(pendingSource, base)).toString());
+    if (pending.kind !== "synthetic-pending-fixture" || pending.eventId !== params.eventId)
+      throw new Error("live pending feed format and admission binding are not defined");
+    const pendingBase = pendingPath.startsWith("https://") ? new URL(".", pendingPath).toString() : dirname(pendingPath);
+    const pages = await loadEnvelopes(pending.evidenceSource, pendingBase, params.eventId);
+    const blocks = JSON.parse((await readSource(pending.anchorBlocksSource, pendingBase)).toString());
+    const credentials = JSON.parse((await readSource(params.credentialsSource, base)).toString());
+    const evidence = verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, blocks);
+    evaluation = evaluateRule(params, evidence, credentials);
+  } catch (error) {
+    console.log(JSON.stringify({ result: "UNAVAILABLE",
+      reason: error instanceof Error ? error.message : String(error) }));
+    return 2;
+  }
   const address = key.toLowerCase();
   const eligible = evaluation.eligible.find(x => x.address.toLowerCase() === address);
   const rejected = evaluation.rejected.find(x => x.address.toLowerCase() === address);
   if (!eligible && !rejected) throw new Error("unknown event key");
-  console.log(JSON.stringify({ provisional: true, key, reached: !!eligible,
+  console.log(JSON.stringify({ provisional: true, source: "synthetic-pending-fixture", key, reached: !!eligible,
     partners: eligible?.partners ?? [], reason: rejected?.reason ?? null }));
+  return 0;
 }
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const a = argsOf(rest);
   if (command === "evaluate" && a.params && a.out) await evaluate(a.params, a.out);
   else if (command === "verify" && a.manifest) process.exitCode = await verify(a.manifest, a.rpc, a.contract);
-  else if (command === "progress" && a.params && a.key) await progress(a.params, a.key);
+  else if (command === "progress" && a.params && a.key)
+    process.exitCode = await progress(a.params, a.key, a.pending);
   else throw new Error("usage: mizar evaluate --params p.json --out dir | verify --manifest path [--rpc url --contract addr] | progress --params p.json --key addr");
 }
-main().catch(error => { console.error(error instanceof Error ? error.message : String(error)); process.exitCode = 2; });
+main().catch(error => {
+  const reason = error instanceof Error ? error.message : String(error);
+  if (/live snapshot requires|commitment anchor not backed|cutoff block unavailable|registration unavailable|definition anchor unavailable|fetch failed|network/i.test(reason))
+    console.log(JSON.stringify({ result: "UNAVAILABLE", reason }));
+  else console.error(reason);
+  process.exitCode = 2;
+});

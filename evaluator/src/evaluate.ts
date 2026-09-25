@@ -8,7 +8,9 @@ export interface Parameters {
   evaluatorVersion: "mizar-eval/1";
   eventId: string; chainId: number; minPartners: number; minWindowsPerPartner: number;
   credentialsPublicKey: string;
-  evidenceSource: string; credentialsSource: string; anchorBlocksSource: string;
+  evidenceSource: string; credentialsSource: string; anchorBlocksSource?: string;
+  rpcUrl?: string; eventRegistry?: string; definitionRegistry?: string; commitmentRegistry?: string;
+  pendingSource?: string;
   snapshot: { id: number; cutoffBlock: number; cutoffTimestamp: number };
 }
 export interface Credential {

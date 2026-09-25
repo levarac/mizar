@@ -5,7 +5,8 @@ import type { Envelope } from "./evidence.js";
 
 export const digestBytes = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 export const sourcePath = (source: string, base: string) =>
-  /^https:\/\//.test(source) ? source : isAbsolute(source) ? source : resolve(base, source);
+  /^https:\/\//.test(source) ? source : base.startsWith("https://") ? new URL(source, base).toString()
+    : isAbsolute(source) ? source : resolve(base, source);
 export async function readSource(source: string, base: string): Promise<Buffer> {
   const path = sourcePath(source, base);
   if (path.startsWith("https://")) {
