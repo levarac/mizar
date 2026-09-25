@@ -17,7 +17,9 @@ interface Vm {
     function etch(address target, bytes calldata code) external;
     function readFile(string calldata path) external returns (string memory);
     function parseJsonAddress(string calldata json, string calldata key) external pure returns (address);
+    function parseJsonAddressArray(string calldata json, string calldata key) external pure returns (address[] memory);
     function parseJsonBytes32(string calldata json, string calldata key) external pure returns (bytes32);
+    function parseJsonBytes32Array(string calldata json, string calldata key) external pure returns (bytes32[] memory);
     function parseJsonBytes(string calldata json, string calldata key) external pure returns (bytes memory);
     function envOr(string calldata name, string calldata defaultValue) external returns (string memory);
     function createSelectFork(string calldata urlOrAlias) external returns (uint256);
@@ -101,6 +103,40 @@ contract MizarClaimTest {
             1, eventKey, proof, RECIPIENT, _signature(KEY, block.chainid, address(claimContract), RECIPIENT)
         );
         require(mockEAS.calls() == 1, "sibling proof not accepted");
+    }
+
+    function testEvaluatorThreeAddressProofsAllClaim() public {
+        // These labels are public deterministic TEST KEYS from the evaluator fixture generator.
+        string memory json = vm.readFile("test/fixtures/merkle-3-address.json");
+        address[] memory addresses = vm.parseJsonAddressArray(json, ".addresses");
+        bytes32 root = vm.parseJsonBytes32(json, ".root");
+        require(addresses.length == 3, "fixture address count");
+        require(root == 0xadad4040c18fafa3fd40fa142d1697b736f0c0b95050ba66ad302f0d2373d8a2, "fixture root drift");
+
+        string[3] memory proofPaths = [
+            '.proofs["0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De"]',
+            '.proofs["0x78488fB96739A6188E7de7219ca0D11e3869b738"]',
+            '.proofs["0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F"]'
+        ];
+        string[3] memory labels = ["A", "B", "C"];
+
+        vm.prank(POSTER);
+        claimContract.postRoot(1, root, MANIFEST, 100);
+        for (uint256 i = 0; i < 3; i++) {
+            bytes32[] memory proof = vm.parseJsonBytes32Array(json, proofPaths[i]);
+            bool matched;
+            for (uint256 j = 0; j < 3; j++) {
+                uint256 key = uint256(sha256(abi.encodePacked("Mizar public deterministic TEST KEY: ", labels[j])));
+                if (vm.addr(key) != addresses[i]) continue;
+                claimContract.claim(
+                    1, addresses[i], proof, RECIPIENT, _signature(key, block.chainid, address(claimContract), RECIPIENT)
+                );
+                matched = true;
+                break;
+            }
+            require(matched, "fixture signer mismatch");
+        }
+        require(mockEAS.calls() == 3, "not all fixture proofs claimed");
     }
 
     function testWrongRecipientReverts() public {

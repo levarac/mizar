@@ -5,4 +5,7 @@ test = "test"
 script = "script"
 out = "out"
 libs = []
-fs_permissions = [{ access = "read", path = "../docs/design/test-vectors" }]
+fs_permissions = [
+    { access = "read", path = "../docs/design/test-vectors" },
+    { access = "read", path = "test/fixtures" },
+]

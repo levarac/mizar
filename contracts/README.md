@@ -12,6 +12,8 @@ forge test -vv
 
 The Sepolia fork test calls `vm.skip` when `SEPOLIA_RPC_URL` is unset. To run it, set that variable to a Sepolia RPC URL and run `forge test -vv`. The fork test registers the exact schema and makes an attestation only in Foundry's local fork; it does not broadcast either transaction.
 
+`test/fixtures/merkle-3-address.json` is a copy of the evaluator's deterministic fixture generated with `@openzeppelin/merkle-tree` 1.0.8. The claim test uses its exact root and all three proofs, signing with public deterministic test keys derived from the fixture labels `A`, `B`, and `C`.
+
 The eligible leaf uses OpenZeppelin StandardMerkleTree's single-address encoding: `keccak256(bytes.concat(keccak256(abi.encode(eventKeyAddress))))`. Each event key can claim once across all snapshots. The root and manifest are recorded by `RootPosted`; only the configured poster can post roots.
 
 ## Dependencies
