@@ -49,7 +49,14 @@ pnpm mizar evaluate --params live-params.json --out /tmp/mizar-live \
 ```
 
 `--from-block` applies to registration, definition and commitment log reads.
-Choose a lower bound that includes all relevant events from all three registries.
+Without the flag, live evaluation uses the optional numeric `registrationBlock`
+from its parameters. `verify --rpc` uses that field only from `--trusted-params`,
+never from the archive. An explicit flag takes precedence; when neither is
+provided, the existing default is block 0. Obtain `registrationBlock` from a
+verified registration receipt: the registry's stored registration timestamp is
+not a block number, and the evaluator does not estimate one or scan logs to
+discover it. Choose a lower bound that includes all relevant events from all
+three registries.
 Only commitments recorded by the event's registered operator can supply the
 mapping. A missing matching event remains `UNAVAILABLE`; timestamps and sequence
 numbers are never used to estimate a block. Commitments after the cutoff are
@@ -67,7 +74,7 @@ the snapshot against sources the verifier chooses:
 ```sh
 pnpm mizar verify --manifest dir/manifest.json --rpc env:SEPOLIA_RPC_URL --contract <claim> \
   --trusted-params <published params.json> [--trusted-params-sha256 <hex>] \
-  --chain-id 11155111 [--from-block <n>] \
+  --chain-id 11155111 [--from-block <n>] [--min-log-span <n>] [--max-log-calls <n>] \
   --event-registry <addr> --definition-registry <addr> --commitment-registry <addr> \
   [--credentials-source <Alcor list URL or file>]
 ```
@@ -112,12 +119,35 @@ verify returns `UNAVAILABLE`.
   cutoff block, and the SHA-256 of the exact written manifest bytes. The
   contract's snapshots are private, so the event is the public read surface.
 
-Log reads start at `--from-block` (default 0). Use the commitment registry's
-deployment block. A later block, such as the event's registration block, is
-safe only if the registry refuses commitments recorded before registration;
-otherwise it can hide an omitted commitment. A range the RPC rejects as too wide or too large
-is split in half down to 100 blocks; any other RPC error, or more than 500
-`eth_getLogs` calls, is `UNAVAILABLE`. Only failures of sources the verifier
+Use `registrationBlock` only with a trusted commitment registry that refuses
+commitments recorded before event registration. Otherwise supply the registry's
+deployment block explicitly with `--from-block`; starting later could hide an
+omitted commitment.
+
+Both `evaluate` and `verify --rpc` accept these RPC limits:
+
+- `--min-log-span <n>`: stop splitting a rejected block range when it is at most
+  this many blocks (default 100). Set it to 10 for an RPC limited to 10 blocks.
+- `--max-log-calls <n>`: total `eth_getLogs` attempts for the entire command
+  (default 500), shared by all registry reads and `RootPosted`, including failed
+  range attempts. Both limits must be positive safe integers.
+
+A range rejected as too wide or too large is bisected until it succeeds or
+reaches the minimum span. For a 10-block RPC, for example:
+
+```sh
+pnpm mizar evaluate --params live-params.json --out /tmp/mizar-live \
+  --rpc env:SEPOLIA_RPC_URL --min-log-span 10 --max-log-calls 500
+```
+
+This uses the parameters' verified `registrationBlock` if present. Apply the
+same limits to the `verify --rpc` command above. Long ranges may need a larger
+explicit call budget; do not move the lower bound past relevant events merely
+to fit the budget. Exhausting the budget, failure at the minimum span, or any
+non-range RPC error returns `UNAVAILABLE`, never a partial evaluation or PASS.
+RPC limit flags are not added to archived parameters or manifests.
+
+Only failures of sources the verifier
 chose (the manifest fetch, the RPC, the trusted parameters and credential list)
 are `UNAVAILABLE`. Archive content is the poster's responsibility: a missing or
 unparsable input or output file is a `FAIL`, and output files are read only

@@ -11,22 +11,30 @@ async function rpc<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 // Public RPCs cap eth_getLogs by block range or result size. Only such an error splits
-// the range in half, down to MIN_SPAN blocks; any other error, or more than
-// MAX_LOG_CALLS calls in one run, makes the read unavailable.
-const MIN_SPAN = 100, MAX_LOG_CALLS = 500;
+// the range in half, down to the configured span. A shared call budget covers
+// every registry and RootPosted read, including rejected ranges.
+let minLogSpan = 100, maxLogCalls = 500, logCalls = 0;
+export function configureLogReads(minSpan = 100, maxCalls = 500): void {
+  for (const [flag, value] of [["--min-log-span", minSpan], ["--max-log-calls", maxCalls]] as const)
+    if (!Number.isSafeInteger(value) || value < 1)
+      throw new UnavailableError(`${flag} must be a positive safe integer`);
+  minLogSpan = minSpan;
+  maxLogCalls = maxCalls;
+  logCalls = 0;
+}
 const RANGE_ERROR = /block range|range (is )?too|too (large|wide|big)|too many (results|logs|blocks)|returned more than|response size|max(imum)? (block|range|results)/i;
-let logCalls = 0;
 async function logsInRange(provider: JsonRpcProvider, filter: { address: string; topics: string[] },
   fromBlock: number, toBlock: number | "latest"): Promise<Log[]> {
   const to = toBlock === "latest" ? await rpc(() => provider.getBlockNumber()) : toBlock;
   const read = async (from: number, until: number): Promise<Log[]> => {
     if (from > until) return [];
-    if (++logCalls > MAX_LOG_CALLS)
-      throw new UnavailableError(`RPC unavailable: more than ${MAX_LOG_CALLS} eth_getLogs calls; pass a later --from-block`);
+    if (++logCalls > maxLogCalls)
+      throw new UnavailableError(`RPC unavailable: more than ${maxLogCalls} eth_getLogs calls; ` +
+        "pass a trusted --from-block or increase --max-log-calls");
     try { return await provider.getLogs({ ...filter, fromBlock: from, toBlock: until }); }
     catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (!RANGE_ERROR.test(message) || until - from + 1 <= MIN_SPAN) return rpc(() => Promise.reject(error));
+      if (!RANGE_ERROR.test(message) || until - from + 1 <= minLogSpan) return rpc(() => Promise.reject(error));
       const middle = Math.floor((from + until) / 2);
       return [...await read(from, middle), ...await read(middle + 1, until)];
     }
