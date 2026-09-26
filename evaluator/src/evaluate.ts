@@ -10,6 +10,7 @@ export interface Parameters {
   credentialsPublicKey: string;
   evidenceSource: string; credentialsSource: string; anchorBlocksSource?: string;
   rpcUrl?: string; eventRegistry?: string; definitionRegistry?: string; commitmentRegistry?: string;
+  registrationBlock?: number;
   pendingSource?: string;
   snapshot: { id: number; cutoffBlock: number; cutoffTimestamp: number };
 }

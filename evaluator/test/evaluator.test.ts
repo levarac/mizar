@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, spawnSync } from "node:child_process";
@@ -337,7 +337,7 @@ describe("CLI receipt", () => {
       expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 120_000);
-  const checkRpc = async (liveOnly: boolean) => {
+  const checkRpc = async (liveOnly: boolean, rangeOnly = false) => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
     const registries = { eventRegistry: "0x00000000000000000000000000000000000000e1",
@@ -345,8 +345,9 @@ describe("CLI receipt", () => {
       commitmentRegistry: "0x00000000000000000000000000000000000000a1" };
     const [page] = pages, admission = page.admission, anchor = page.commitments[0].anchor;
     const abi = AbiCoder.defaultAbiCoder(), word = (value: string | number) => zeroPadValue(toBeHex(value), 32);
-    const cutoff = params.snapshot.cutoffBlock, rangeCap = 1_500;
-    let head = 5_000, getLogsCalls = 0;
+    const cutoff = params.snapshot.cutoffBlock, rangeCap = rangeOnly ? 10 : 1_500;
+    const registrationBlock = rangeOnly ? 80 : 10;
+    let head = rangeOnly ? 110 : 5_000, getLogsCalls = 0;
     let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
     let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest];
     let extraCommitment = false, junkCommitment = false, extraDefinition = false, rpcDown = false;
@@ -358,7 +359,7 @@ describe("CLI receipt", () => {
     // Offline JSON-RPC stub: the three registry events, the cutoff block and one RootPosted log.
     const logsFor = (topic0: string) => {
       if (topic0 === id("EventRegistered(bytes32,address,address,bytes32,uint64)"))
-        return [log(registries.eventRegistry, 10, [topic0, "0x" + page.context,
+        return [log(registries.eventRegistry, registrationBlock, [topic0, "0x" + page.context,
           zeroPadValue("0x" + admission.anchorRegistration.registrar, 32),
           zeroPadValue("0x" + admission.anchorRegistration.operator, 32)],
         abi.encode(["bytes32", "uint64"], ["0x" + admission.anchorRegistration.keySetDigest,
@@ -368,7 +369,7 @@ describe("CLI receipt", () => {
         const definition = (sequence: number, digest: string, previous: string, block: number) =>
           log(registries.definitionRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
             abi.encode(["bytes32", "uint64", "uint64", "uint64"], ["0x" + previous, d.validFrom, d.validUntil, d.anchoredAt]));
-        return [definition(d.sequence, d.definitionDigest, d.previousDefinitionDigest, 20),
+        return [definition(d.sequence, d.definitionDigest, d.previousDefinitionDigest, rangeOnly ? 85 : 20),
           ...(extraDefinition ? [definition(d.sequence + 1, "cd".repeat(32), d.definitionDigest, 30)] : [])];
       }
       if (topic0 === id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")) {
@@ -469,6 +470,92 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       expect(result.stdout).toContain(reason);
     };
     try {
+      if (rangeOnly) {
+        const liveParams = join(out, "range-params.json");
+        const live = { ...published, registrationBlock,
+          evidenceSource: `https://evidence.example/v1/events/${page.context}/verification`,
+          anchorBlocksSource: undefined };
+        writeFileSync(liveParams, JSON.stringify(live));
+        writeFileSync(trustedParams, JSON.stringify(live));
+        const limits = { "min-log-span": "10", "max-log-calls": "200" };
+        const evaluateLimited = (name: string, ...extra: string[]) => run("evaluate", "--params", liveParams,
+          "--out", join(out, name), "--rpc", "env:MIZAR_TEST_RPC",
+          "--min-log-span", "10", "--max-log-calls", "200", ...extra);
+        const receiptOf = (result: { stdout: string }) => JSON.parse(result.stdout.trim().split("\n").at(-1)!);
+
+        const evaluated = await evaluateLimited("limited");
+        expect(evaluated.stdout, evaluated.stderr).toContain('"result":"EVALUATED"');
+        expect(evaluated.status).toBe(0);
+        const evaluationCalls = getLogsCalls;
+        expect(evaluationCalls).toBeGreaterThan(3);
+        expect(Math.min(...requestedFroms)).toBe(registrationBlock);
+        const evaluatedReceipt = receiptOf(evaluated), manifest = join(out, "limited/manifest.json");
+        expect(evaluatedReceipt.root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
+        posted = { root: evaluatedReceipt.root, manifestDigest: evaluatedReceipt.manifestDigest, cutoffBlock: cutoff };
+        getLogsCalls = 0; requestedFroms.length = 0;
+        const verified = await verifyOnChain(manifest, limits);
+        expect(verified.stdout, verified.stderr).toContain('"result":"PASS"');
+        expect(verified.status).toBe(0);
+        expect(Math.min(...requestedFroms)).toBe(registrationBlock);
+        const verificationCalls = getLogsCalls;
+
+        // The budget is shared across registry reads and RootPosted, including rejected ranges.
+        getLogsCalls = 0;
+        const capped = await evaluateLimited("capped", "--max-log-calls", String(evaluationCalls - 1));
+        expect(capped.status).toBe(2);
+        expect(capped.stdout).toContain('"result":"UNAVAILABLE"');
+        expect(capped.stdout).toContain(`more than ${evaluationCalls - 1} eth_getLogs calls`);
+        expect(getLogsCalls).toBe(evaluationCalls - 1);
+        expect(existsSync(join(out, "capped/manifest.json"))).toBe(false);
+        getLogsCalls = 0;
+        await expectUnavailable(manifest, `more than ${verificationCalls - 1} eth_getLogs calls`,
+          { ...limits, "max-log-calls": String(verificationCalls - 1) });
+        expect(getLogsCalls).toBe(verificationCalls - 1);
+        await expectUnavailable(manifest, "RPC unavailable", { "max-log-calls": "200" });
+        expect((await evaluateLimited("default-span", "--min-log-span", "100")).stdout)
+          .toContain('"result":"UNAVAILABLE"');
+
+        // Explicit bounds win, and verify never takes the default from the archive.
+        await expectUnavailable(manifest, "event registration unavailable", { ...limits, "from-block": "81" });
+        expect((await evaluateLimited("late-bound", "--from-block", "81")).stdout)
+          .toContain("event registration unavailable");
+        writeFileSync(trustedParams, JSON.stringify({ ...live, registrationBlock: 0 }));
+        requestedFroms.length = 0;
+        expect((await verifyOnChain(manifest, limits)).status).toBe(0);
+        expect(requestedFroms[0]).toBe(0);
+        writeFileSync(trustedParams, JSON.stringify({ ...live, registrationBlock: 81 }));
+        await expectUnavailable(manifest, "event registration unavailable", limits);
+        expect((await verifyOnChain(manifest, { ...limits, "from-block": "80" })).status).toBe(0);
+        writeFileSync(liveParams, JSON.stringify({ ...live, registrationBlock: undefined }));
+        requestedFroms.length = 0;
+        expect((await evaluateLimited("fallback-bound")).status).toBe(0);
+        expect(requestedFroms[0]).toBe(0);
+        writeFileSync(liveParams, JSON.stringify({ ...live, registrationBlock: -1 }));
+        expect((await evaluateLimited("invalid-bound")).stdout).toContain('"result":"UNAVAILABLE"');
+        writeFileSync(liveParams, JSON.stringify(live));
+        writeFileSync(trustedParams, JSON.stringify({ ...live, registrationBlock: "80" }));
+        await expectUnavailable(manifest, "registrationBlock", limits);
+
+        for (const [flag, value] of [["--min-log-span", "0"], ["--min-log-span", "1.5"],
+          ["--max-log-calls", "-1"], ["--max-log-calls", "invalid"],
+          ["--max-log-calls", "9007199254740992"]]) {
+          getLogsCalls = 0;
+          const invalid = await evaluateLimited("invalid-limit", flag, value);
+          expect(invalid.status).toBe(2);
+          expect(invalid.stdout).toContain('"result":"UNAVAILABLE"');
+          expect(getLogsCalls).toBe(0);
+        }
+        // Transport settings cannot change the fixture output bytes or manifest digest.
+        for (const extra of [[], ["--min-log-span", "10", "--max-log-calls", "200"]]) {
+          const fixtureRun = await run("evaluate", "--params", "test/fixtures/params.json",
+            "--out", join(out, "fixture"), ...extra);
+          expect(fixtureRun.status).toBe(0);
+          expect(receiptOf(fixtureRun).root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
+          expect(receiptOf(fixtureRun).manifestDigest)
+            .toBe("0x1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a");
+        }
+        return;
+      }
       if (liveOnly) {
         const liveParams = join(out, "live-params.json"), liveOut = join(out, "live");
         writeFileSync(liveParams, JSON.stringify({ ...published,
@@ -628,6 +715,7 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       rmSync(out, { recursive: true, force: true });
     }
   };
+  it("configures RPC log ranges and budgets with trusted registration bounds", () => checkRpc(false, true), 240_000);
   it("maps live anchors using registered operator events and private RPC input", () => checkRpc(true), 240_000);
   it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub",
     () => checkRpc(false), 600_000);
