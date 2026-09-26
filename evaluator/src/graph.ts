@@ -32,6 +32,7 @@ export async function graph(source: { params?: string; snapshot?: string }, out:
   const evidence = verifyEvidence(Array.isArray(parsed) ? parsed : [parsed], params.eventId,
     params.snapshot.cutoffBlock, anchors);
   const final = evaluateRule(params, evidence, credentials);
+  const finalPassed = new Set(final.eligible.map(node => node.address));
   if (source.snapshot) {
     const [eligible, rejected] = await Promise.all(["eligible.json", "rejected.json"].map(p => json(join(base, p))));
     const expectedEligible = { addresses: final.eligible.map(n => n.address), explanations: final.eligible };
@@ -66,11 +67,15 @@ export async function graph(source: { params?: string; snapshot?: string }, out:
     }).sort((a, b) => lower(a.source + a.target).localeCompare(lower(b.source + b.target)));
     const nodes = addresses.map(address => {
       const credentialed = accepted.has(lower(address));
-      const pass = evaluated.eligible.find(n => n.address === address);
-      const reject = evaluated.rejected.find(n => n.address === address);
+      const reached = evaluated.eligible.find(n => n.address === address);
+      // Counters follow the replay prefix, but late conflicts must never turn
+      // a final rejection into an earlier PASS in this snapshot presentation.
+      const pass = reached && finalPassed.has(address);
+      const reject = evaluated.rejected.find(n => n.address === address) ??
+        final.rejected.find(n => n.address === address);
       const mutual = edges.filter(e => e.source === address || e.target === address);
-      const partnerCount = pass?.partners.length ?? reject?.partnerCount ?? 0;
-      const qualifyingPartners = pass?.partners.filter(p => p.windows.length >= params.minWindowsPerPartner).length ??
+      const partnerCount = reached?.partners.length ?? reject?.partnerCount ?? 0;
+      const qualifyingPartners = reached?.partners.filter(p => p.windows.length >= params.minWindowsPerPartner).length ??
         reject?.qualifyingPartners ?? 0;
       const status: Status = pass ? "passed" : !credentialed
         ? duplicate.has(lower(address)) ? "excluded_duplicate" : "not_credentialed"
