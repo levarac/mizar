@@ -10,7 +10,6 @@
     "node": ">=20"
   },
   "dependencies": {
-    "@openzeppelin/merkle-tree": "^1.0.8",
     "ethers": "^6.15.0"
   }
 }

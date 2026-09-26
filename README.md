@@ -36,7 +36,7 @@ Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` in
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
 
-The claim page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Alcor's example bindings do not enable a live World check. Passing local tests does not establish a deployed or working live join-to-claim flow.
+The Alcor service is deployed in World ID staging. The claim page is still pending deployment, and no live World ID proof or app callback has been verified yet. The claim page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The claim-page deployment and first snapshot are pending; the local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging; the claim page and first snapshot are still pending. The local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -98,17 +98,34 @@ The contract also vendors upstream EAS and OpenZeppelin dependencies; versions a
 
 ## Sepolia deployment
 
-The following Sepolia deployment details were supplied on 2026-09-26. The first posted root and live claim are still pending; this claim-page preparation did not independently query the chain.
+The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `11155111`**. The contract was built from [main commit 5302c488817804ec49588b0fdbcdb4dbbcaaf51a](https://github.com/levarac/mizar/commit/5302c488817804ec49588b0fdbcdb4dbbcaaf51a).
 
-| Item | Status |
+| Item | Deployment record |
 | --- | --- |
-| Mizar claim contract address | `0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC` ([deployment transaction](https://sepolia.etherscan.io/tx/0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324)) |
-| Mizar EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` ([registration transaction](https://sepolia.etherscan.io/tx/0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b)) |
-| Public root / claim transaction | Pending the first snapshot and an approved live run |
+| Mizar claim contract | [0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC](https://sepolia.etherscan.io/address/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC) |
+| Deployment transaction / block | [0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324](https://sepolia.etherscan.io/tx/0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324), block [11784009](https://sepolia.etherscan.io/block/11784009) |
+| Source verification | [Sourcify](https://repo.sourcify.dev/11155111/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC): `exact_match` for creation and runtime bytecode |
+| Mizar EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` |
+| Schema registration transaction | [0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b](https://sepolia.etherscan.io/tx/0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b) |
+| Schema resolver / revocability | No resolver; non-revocable |
+| Event ID | `0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1` |
+| Root poster / event registrar | [0xdf6986bbadd189309d52d437851c10e47ca02e20](https://sepolia.etherscan.io/address/0xdf6986bbadd189309d52d437851c10e47ca02e20) |
+| Event registration transaction | [0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b](https://sepolia.etherscan.io/tx/0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b) |
+| Event window (UTC) | `2026-09-26T05:30:00Z` to `2026-09-27T15:00:00Z` |
+| World ID environment / action | `staging` / `mizar-ccb8770a` |
+| Alcor attestation public key / Mizar `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` for the demo event |
+| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployed |
+| Alcor Cloudflare Worker version | `a2e9f0ea-d530-44d7-85a8-ebe2b640acee` |
+| Alcor deployment source | [2215b2a84dae84fb7cfbda446f552a1572cd44c7](https://github.com/levarac/alcor/commit/2215b2a84dae84fb7cfbda446f552a1572cd44c7), now integrated into Alcor `main` |
+| Alcor D1 database | `alcor-human-check` |
+| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
+| Public root / claim transaction | Pending the first snapshot and a live run |
 
-The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments.
+The root poster was configured to be the event registrar; the contract does not derive it from the registry. The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
 
-The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. [Deployment instructions](contracts/README.md#deployment-commands-not-run) are separate from the local checks below. Neither script was broadcast for this documentation work.
+The demo's [event-level parameter baseline](docs/demo/params-0xccb8770a.json) has exact-file SHA-256 `1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08`. It intentionally omits snapshot values and cannot be used alone as `--trusted-params`: before each snapshot, publish a complete file at `docs/demo/snapshots/0xccb8770a/<snapshotId>/params.json` with its own digest and immutable commit URL, as described in the [publication instructions](docs/demo/README.md). A verifier supplies that complete file or pinned URL to `verify --rpc --trusted-params` and its own digest to `--trusted-params-sha256`; the baseline digest does not pin a later snapshot file.
+
+The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. The [deployment record and instructions](contracts/README.md#sepolia-deployment) are separate from the local checks below. This documentation update records an existing deployment; neither script was broadcast during the update, and it does not establish a successful live evaluation, claim or join-to-claim flow.
 
 ## Local build and verification
 
@@ -147,7 +164,7 @@ The evaluator's automated suite exercises this live evaluation path against a lo
 
 Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`; `--rpc env:SEPOLIA_RPC_URL` is supported here too. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. The pinned `bf91f66` checkout includes the trusted-parameter guard fix. A local path inside the manifest's directory, or any URL on a remote manifest's origin, is refused as a trust source. Local paths are resolved and classified as the input reader resolves them, including symlink resolution for the archive check. This guard catches location mistakes; it does not establish the provenance of a copy kept elsewhere.
 
-Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that credential entries that verify and were verified by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The organizer's parameters publication location and independent digest remain undecided.
+Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that credential entries that verify and were verified by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The [demo publication instructions](docs/demo/README.md) fix the event baseline and per-snapshot path pattern; each complete snapshot file and its independent digest must still be published before evaluation and root posting.
 
 Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid archive contents and checked archive mismatches produce `FAIL`. A mismatch between the verifier's parameter copy and its optional expected digest is `UNAVAILABLE`. See the [current evaluator README](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/evaluator/README.md) for the complete command and trust assumptions. Live chain verification was not run for this document.
 
@@ -188,7 +205,7 @@ pnpm typecheck
 
 If a parent directory contains a pnpm workspace, add `--ignore-workspace` to the Alcor Worker install.
 
-The tests use local Miniflare D1 and an injected World verification client. The proof fixtures are documentation-shaped mocks, not captured live World proofs. See [Alcor's Worker README](https://github.com/levarac/alcor/blob/7909844bc76c74f35b5266f6849ff744dd84d453/worker/README.md) for the live configuration still required.
+The tests use local Miniflare D1 and an injected World verification client. The proof fixtures are documentation-shaped mocks, not captured live World proofs. See [Alcor's Worker README](https://github.com/levarac/alcor/blob/7909844bc76c74f35b5266f6849ff744dd84d453/worker/README.md) for the configuration interface at that tested revision. The deployment record above is separate from these historical local checks.
 
 ### Observed local results
 

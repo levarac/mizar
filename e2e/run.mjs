@@ -31,6 +31,7 @@ import {
   ZeroAddress,
   id,
   keccak256,
+  solidityPacked,
   toBeHex,
   zeroPadValue,
 } from 'ethers';
@@ -63,8 +64,10 @@ const TEST_KEY_LABELS = ['A', 'B', 'C', 'M1', 'M2', 'M3', 'D'];
 const testKey = (label) =>
   `0x${createHash('sha256').update(`Mizar public deterministic TEST KEY: ${label}`).digest('hex')}`;
 
+// Match SchemaRegistry's keccak256(abi.encodePacked(schema, resolver, revocable)).
+// Real deployments must use the UID returned by SchemaRegistry.register or its Registered event.
 const SCHEMA_UID = keccak256(
-  AbiCoder.defaultAbiCoder().encode(
+  solidityPacked(
     ['string', 'address', 'bool'],
     ['bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest', ZeroAddress, false],
   ),
@@ -134,7 +137,7 @@ async function main() {
   );
 
   console.log('installing evaluator dependencies');
-  execFileSync('pnpm', ['--dir', evaluatorDir, 'install'], { stdio: 'inherit' });
+  execFileSync('pnpm', ['--dir', evaluatorDir, 'install', '--frozen-lockfile'], { stdio: 'inherit' });
 
   const outDir = mkdtempSync(join(tmpdir(), 'mizar-e2e-eval-'));
   const evaluateOut = execFileSync(
