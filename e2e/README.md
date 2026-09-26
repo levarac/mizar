@@ -24,8 +24,8 @@ pnpm e2e
 2. `pnpm mizar evaluate --params test/fixtures/params.json --out <tmpdir>` in
    `../evaluator`, the real evaluator CLI, on the checked-in fixture inputs.
 3. Starts `anvil --chain-id 11155111` (the fixture's `params.chainId`) and mines
-   past the fixture cutoff block, because `mizar verify` reads `RootPosted`
-   from `cutoffBlock` onward.
+   past the fixture cutoff block, because the on-chain check reads the
+   `RootPosted` log from `cutoffBlock` onward.
 4. Deploys `MockEAS` from a separate account, then deploys `MizarClaim` as
    anvil account 0's first transaction so it lands at
    `0x5FbDB2315678afecb367f032d93F642f64180aa3`, the `claimContract` in the
@@ -45,8 +45,12 @@ pnpm e2e
    - the signing codec reproduces the golden vector's digest and signature
      byte for byte (the golden key is not in the evaluator's eligible set, so
      it cannot claim against the evaluator root);
-   - `mizar verify --manifest <out>/manifest.json --rpc <anvil> --contract
-     <claim>` prints `{"result":"PASS"}`.
+   - `mizar verify --manifest <out>/manifest.json` (offline) prints
+     `{"result":"PASS"}`;
+   - the `RootPosted` log on anvil carries the manifest root, the `SHA256` of
+     the `manifest.json` bytes, and the params cutoff block. The evaluator's
+     `verify --rpc` check is `UNAVAILABLE` for fixture params (no registry
+     addresses), so the script performs the same log comparison itself.
 
 Everything runs against the local chain only; no Sepolia or other live
 network is touched.

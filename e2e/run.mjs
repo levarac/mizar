@@ -29,7 +29,10 @@ import {
   SigningKey,
   Wallet,
   ZeroAddress,
+  id,
   keccak256,
+  toBeHex,
+  zeroPadValue,
 } from 'ethers';
 
 const e2eDir = dirname(fileURLToPath(import.meta.url));
@@ -193,8 +196,9 @@ async function main() {
       'anvil must run the evaluation-parameters chain id',
     );
 
-    // mizar verify reads RootPosted from cutoffBlock onward, so the local chain
-    // must be past the fixture's cutoff block before the root is posted.
+    // The on-chain RootPosted check reads logs from cutoffBlock onward (same as
+    // the evaluator's readPostedRoot), so the local chain must be past the
+    // fixture's cutoff block before the root is posted.
     const head = BigInt(await provider.getBlockNumber());
     if (head <= cutoffBlock) {
       await provider.send('anvil_mine', [`0x${(cutoffBlock - head + 5n).toString(16)}`]);
@@ -319,13 +323,31 @@ async function main() {
 
     const verifyOut = execFileSync(
       'pnpm',
-      ['--dir', evaluatorDir, 'mizar', 'verify', '--manifest', join(outDir, 'manifest.json'),
-        '--rpc', RPC_URL(port), '--contract', claimAddress],
+      ['--dir', evaluatorDir, 'mizar', 'verify', '--manifest', join(outDir, 'manifest.json')],
       { encoding: 'utf8' },
     ).trim();
     const receipt = JSON.parse(verifyOut.split('\n').filter((l) => l.startsWith('{')).pop());
     assert.equal(receipt.result, 'PASS', `mizar verify returned ${verifyOut}`);
-    console.log('PASS: mizar verify --rpc --contract returned {"result":"PASS"}');
+    console.log('PASS: offline mizar verify returned {"result":"PASS"}');
+
+    // The evaluator's on-chain comparison (verify --rpc) is UNAVAILABLE for
+    // fixture params that carry no registry addresses, so the script reads the
+    // RootPosted log itself: same topics and same fromBlock = cutoffBlock.
+    const rootLogs = await provider.getLogs({
+      address: claimAddress,
+      topics: [
+        id('RootPosted(uint64,bytes32,bytes32,uint64)'),
+        zeroPadValue(toBeHex(snapshotId), 32),
+      ],
+      fromBlock: cutoffBlock,
+      toBlock: 'latest',
+    });
+    assert.equal(rootLogs.length, 1, 'expected exactly one RootPosted log for the snapshot');
+    const posted = claimAsSubmitter.interface.parseLog(rootLogs[0]);
+    assert.equal(posted.args.root, root, 'on-chain root differs from manifest root');
+    assert.equal(posted.args.manifestDigest, manifestDigest, 'on-chain manifestDigest mismatch');
+    assert.equal(posted.args.cutoffBlock, cutoffBlock, 'on-chain cutoffBlock mismatch');
+    console.log('PASS: on-chain RootPosted matches the manifest root, digest, and cutoffBlock');
 
     console.log('e2e fixture run complete');
   } finally {
