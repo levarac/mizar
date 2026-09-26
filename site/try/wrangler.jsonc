@@ -1,0 +1,12 @@
+{
+  "name": "levarac-try",
+  "account_id": "3b81daf46f27d8d61d46559407b8a607",
+  "compatibility_date": "2026-06-24",
+  "workers_dev": true,
+  "preview_urls": false,
+  "build": { "command": "node build.mjs" },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}
