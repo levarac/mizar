@@ -213,8 +213,8 @@ describe("OpenZeppelin address-only tree", () => {
 
 describe("CLI receipt", () => {
   it("uses an explicit synthetic pending feed and refuses missing live feed", () => {
-    const run = (file: string) => spawnSync(process.execPath,
-      ["--import", "tsx", "src/cli.ts", "progress", "--params", file, "--key", credentials.credentials[0].eventKeyAddress],
+    const run = (file: string) => spawnSync("pnpm",
+      ["mizar", "progress", "--params", file, "--key", credentials.credentials[0].eventKeyAddress],
       { cwd: root, encoding: "utf8", timeout: 30_000 });
     const fixtureProgress = run("test/fixtures/params.json");
     expect(fixtureProgress.status).toBe(0);
@@ -237,8 +237,8 @@ describe("CLI receipt", () => {
       writeFileSync(file, JSON.stringify({ ...params,
         evidenceSource: `https://fixture.invalid/v1/events/${params.eventId.slice(2)}/verification`,
         rpcUrl: undefined, commitmentRegistry: undefined }));
-      const result = spawnSync(process.execPath,
-        ["--import", "tsx", "src/cli.ts", "evaluate", "--params", file, "--out", join(out, "result")],
+      const result = spawnSync("pnpm",
+        ["mizar", "evaluate", "--params", file, "--out", join(out, "result")],
         { cwd: root, encoding: "utf8", timeout: 30_000 });
       expect(result.status).toBe(2);
       expect(result.stdout).toContain('"result":"UNAVAILABLE"');
@@ -247,7 +247,7 @@ describe("CLI receipt", () => {
   }, 30_000);
   it("writes four output classes, passes, and fails on one-bit input/root changes", () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-eval-test-"));
-    const run = (...args: string[]) => spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
+    const run = (...args: string[]) => spawnSync("pnpm", ["mizar", ...args], {
       cwd: root, encoding: "utf8", timeout: 30_000,
     });
     try {
