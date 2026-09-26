@@ -37,6 +37,7 @@ const recipientGrouped = document.querySelector<HTMLElement>("#recipient-grouped
 const signButton = document.querySelector<HTMLButtonElement>("#sign")!;
 const submitButton = document.querySelector<HTMLButtonElement>("#submit")!;
 const signatureEl = document.querySelector<HTMLElement>("#signature")!;
+document.querySelector<HTMLElement>("#deployment")!.textContent = JSON.stringify(claimPageConfig, null, 2);
 
 const chain = defineChain({
   id: claimPageConfig.chainId,

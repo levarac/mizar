@@ -61,6 +61,12 @@ button:disabled {
   word-break: break-all;
 }
 
+#deployment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+
 #error,
 #status.error {
   color: #8d1d1d;

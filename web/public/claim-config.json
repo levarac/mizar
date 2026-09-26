@@ -1,0 +1,10 @@
+{
+  "chainId": 11155111,
+  "chainName": "Sepolia",
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "eventId": "0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1",
+  "claimContract": "0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC",
+  "eligibleJsonUrl": "REPLACE_SAME_ORIGIN_ELIGIBLE_JSON_URL",
+  "expectedRoot": "REPLACE_POSTED_ROOT",
+  "snapshotId": "REPLACE_POSTED_SNAPSHOT_ID"
+}

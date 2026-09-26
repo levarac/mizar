@@ -5,6 +5,18 @@ import { addressFromCompressedKey, claimMessageBytes, type CallbackFragment } fr
 import { claimPageConfig } from "./config";
 import { clearClaimIfDifferent, loadSession, saveSession, type Session } from "./session";
 
+// Preserve the original callback fixtures independently of the live event.
+vi.mock("./config", () => ({ claimPageConfig: {
+  chainId: 1,
+  chainName: "Example Chain",
+  rpcUrl: "http://127.0.0.1:8545",
+  claimContract: "0x0000000000000000000000000000000000000001",
+  eventId: `0x${"11".repeat(32)}`,
+  eligibleJsonUrl: "https://example.invalid/eligible.json",
+  expectedRoot: `0x${"22".repeat(32)}`,
+  snapshotId: 0,
+} }));
+
 const key = getAddress("0x05e8bDCA0D0523483Bc1a2F490A2F03cB00B776D");
 const other = getAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
 const recipient = getAddress("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
@@ -74,7 +86,7 @@ describe("claim callback session persistence", () => {
 
     const elements = new Map([
       "#status", "#event-key", "#eligibility", "#recipient", "#recipient-grouped",
-      "#sign", "#submit", "#signature",
+      "#sign", "#submit", "#signature", "#deployment",
     ].map((id) => [id, {
       textContent: "", value: "", disabled: false,
       classList: { toggle: vi.fn() }, addEventListener: vi.fn(),
