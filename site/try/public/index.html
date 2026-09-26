@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Levarac: try Mizar and Alcor</title>
+<meta name="description" content="Levarac at ETHGlobal Tokyo 2026. Mizar makes eligibility recomputable from published inputs: signed mutual encounters between human-checked phones, a fixed N/B rule, a snapshot root on Sepolia and individual EAS claims.">
+<meta name="theme-color" content="#FEFFFB">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Levarac: try Mizar and Alcor">
+<meta property="og:description" content="Eligibility, recomputable from published inputs. Built at ETHGlobal Tokyo 2026.">
+<meta property="og:url" content="https://levarac-try.levarac.workers.dev/">
+<meta property="og:image" content="https://levarac-try.levarac.workers.dev/img/cover.png">
+<meta property="og:image:width" content="1920">
+<meta property="og:image:height" content="1080">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/png" href="/img/logo-180.png">
+<link rel="apple-touch-icon" href="/img/logo-180.png">
+<link rel="preload" href="/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<a class="skip" href="#try">Skip to Try it</a>
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Levarac home">
+    <img src="/img/logo-180.png" width="40" height="40" alt="">
+    <span>Levarac</span>
+  </a>
+  <p class="label top-event"><span class="sq" aria-hidden="true"></span>ETHGlobal Tokyo 2026</p>
+</header>
+
+<main>
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-copy">
+    <p class="label"><span class="sq" aria-hidden="true"></span>Mizar and Alcor</p>
+    <h1 id="hero-title">Eligibility, <span class="hl">recomputable from published inputs.</span></h1>
+    <p class="lede">An event key qualifies when it has signed mutual observations with at least <b>N</b> distinct Alcor-credentialed partner keys, in at least <b>B</b> time windows per partner, and the claimant holds an Alcor distinct-human credential.</p>
+    <p class="fine">This proves the published rule was met under its evidence and credential trust assumptions. It does not prove physical attendance.</p>
+    <div class="actions">
+      <a class="btn btn-primary" href="#try">Try it</a>
+      <a class="btn" href="https://github.com/levarac/mizar">Read the source</a>
+    </div>
+  </div>
+
+  <figure class="hero-figure">
+    <svg class="encounter" viewBox="0 0 520 440" role="img" aria-labelledby="enc-title enc-desc">
+      <title id="enc-title">Four phones meeting over two time windows</title>
+      <desc id="enc-desc">Phones A, B and C see each other in both windows, so each has two partners with two windows and passes. The passer-by D meets C in one window only and fails.</desc>
+      <g class="enc-state" font-family="var(--mono)">
+        <text class="st st-w1" x="0" y="18">WINDOW 1 OF 2</text>
+        <text class="st st-w2" x="0" y="18">WINDOW 2 OF 2</text>
+        <text class="st st-end" x="0" y="18">RESULT · N = 2, B = 2</text>
+      </g>
+
+      <g class="rings" fill="none">
+        <circle class="ring r1" cx="110" cy="120" r="34"/>
+        <circle class="ring r1" cx="410" cy="120" r="34"/>
+        <circle class="ring r1" cx="260" cy="290" r="34"/>
+        <circle class="ring r1 d" cx="440" cy="380" r="34"/>
+        <circle class="ring r2" cx="110" cy="120" r="34"/>
+        <circle class="ring r2" cx="410" cy="120" r="34"/>
+        <circle class="ring r2" cx="260" cy="290" r="34"/>
+      </g>
+
+      <g class="edges" fill="none" stroke-linecap="round">
+        <line class="e e1" pathLength="1" x1="110" y1="120" x2="410" y2="120"/>
+        <line class="e e1" pathLength="1" x1="110" y1="120" x2="260" y2="290"/>
+        <line class="e e1" pathLength="1" x1="410" y1="120" x2="260" y2="290"/>
+        <line class="e e1 e-once" pathLength="1" x1="260" y1="290" x2="440" y2="380"/>
+        <line class="e e2" pathLength="1" x1="110" y1="120" x2="410" y2="120"/>
+        <line class="e e2" pathLength="1" x1="110" y1="120" x2="260" y2="290"/>
+        <line class="e e2" pathLength="1" x1="410" y1="120" x2="260" y2="290"/>
+      </g>
+
+      <g class="once-note" font-family="var(--mono)">
+        <text x="362" y="322">1 window</text>
+      </g>
+
+      <g class="phones">
+        <g class="phone pass" transform="translate(110 120)">
+          <rect x="-22" y="-36" width="44" height="72" rx="9"/>
+          <line class="notch" x1="-7" y1="-28" x2="7" y2="-28"/>
+          <text class="glyph" y="7">A</text>
+          <g class="chip" transform="translate(0 58)"><rect x="-27" y="-11" width="54" height="22"/><text y="4.5">PASS</text></g>
+          <text class="cnt" y="88">2/2 partners</text>
+        </g>
+        <g class="phone pass" transform="translate(410 120)">
+          <rect x="-22" y="-36" width="44" height="72" rx="9"/>
+          <line class="notch" x1="-7" y1="-28" x2="7" y2="-28"/>
+          <text class="glyph" y="7">B</text>
+          <g class="chip" transform="translate(0 58)"><rect x="-27" y="-11" width="54" height="22"/><text y="4.5">PASS</text></g>
+          <text class="cnt" y="88">2/2 partners</text>
+        </g>
+        <g class="phone pass" transform="translate(260 290)">
+          <rect x="-22" y="-36" width="44" height="72" rx="9"/>
+          <line class="notch" x1="-7" y1="-28" x2="7" y2="-28"/>
+          <text class="glyph" y="7">C</text>
+          <g class="chip" transform="translate(0 58)"><rect x="-27" y="-11" width="54" height="22"/><text y="4.5">PASS</text></g>
+          <text class="cnt" y="88">2/2 partners</text>
+        </g>
+        <g class="phone fail" transform="translate(440 380)">
+          <rect x="-22" y="-36" width="44" height="72" rx="9"/>
+          <line class="notch" x1="-7" y1="-28" x2="7" y2="-28"/>
+          <text class="glyph" y="7">D</text>
+          <g class="chip" transform="translate(-66 0)"><rect x="-27" y="-11" width="54" height="22"/><text y="4.5">FAIL</text></g>
+        </g>
+      </g>
+    </svg>
+    <figcaption>Illustration of the rule with the published demo values N = 2, B = 2. D, a passer-by, meets one phone once.</figcaption>
+  </figure>
+</section>
+
+<section id="try" class="band" aria-labelledby="try-title">
+  <div class="sec-head">
+    <p class="label"><span class="sq" aria-hidden="true"></span>Try it</p>
+    <h2 id="try-title">Six ways in, <span class="hl">from a phone or a terminal.</span></h2>
+  </div>
+
+  <div class="cards">
+    <article class="card card-muted" aria-labelledby="c-video">
+      <p class="label"><span class="sq sq-muted" aria-hidden="true"></span>Demo video</p>
+      <h3 id="c-video">Video coming soon</h3>
+      <p>A walkthrough of the join, encounter and claim flow. The link will appear here once it is published.</p>
+      <p class="card-foot mono muted">Not yet available</p>
+    </article>
+
+    <article class="card" aria-labelledby="c-beid">
+      <p class="label"><span class="sq" aria-hidden="true"></span>iOS app</p>
+      <h3 id="c-beid">Install Beid through TestFlight</h3>
+      <p>The ETHGlobal Tokyo demo build of Beid, the attendee app that records and signs BLE observations.</p>
+      <a class="card-link" href="https://testflight.apple.com/join/2DNXhfTR">Join the TestFlight</a>
+    </article>
+
+    <article class="card" aria-labelledby="c-alcor">
+      <p class="label"><span class="sq" aria-hidden="true"></span>Human check</p>
+      <h3 id="c-alcor">Open the Alcor join page</h3>
+      <p>Binds one World ID to an event key. The full flow needs the Beid app, which signs the check with its event key.</p>
+      <a class="card-link" href="https://alcor-human-check.levarac.workers.dev/">alcor-human-check.levarac.workers.dev</a>
+    </article>
+
+    <article class="card" aria-labelledby="c-contract">
+      <p class="label"><span class="sq" aria-hidden="true"></span>Sepolia contract</p>
+      <h3 id="c-contract">MizarClaim</h3>
+      <p class="mono addr">0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC</p>
+      <div class="link-row">
+        <a class="card-link" href="https://sepolia.etherscan.io/address/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC">Etherscan</a>
+        <a class="card-link" href="https://repo.sourcify.dev/11155111/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC">Sourcify, exact match</a>
+      </div>
+    </article>
+
+    <article class="card" aria-labelledby="c-eas">
+      <p class="label"><span class="sq" aria-hidden="true"></span>EAS schema</p>
+      <h3 id="c-eas">Claim attestation schema</h3>
+      <p class="mono addr">0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3</p>
+      <p class="mono small">bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest</p>
+      <a class="card-link" href="https://sepolia.easscan.org/schema/view/0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3">View on EASScan</a>
+    </article>
+
+    <article class="card card-code" aria-labelledby="c-local">
+      <p class="label"><span class="sq" aria-hidden="true"></span>Run locally</p>
+      <h3 id="c-local">Reproduce in one command</h3>
+      <p>From <code>e2e/</code> in a Mizar checkout. It evaluates the fixture, posts a root on a local Anvil chain and claims against MockEAS.</p>
+      <div class="cmd">
+        <pre><code id="cmd-text">pnpm install --frozen-lockfile &amp;&amp; pnpm e2e</code></pre>
+        <button class="copy" type="button" data-copy="cmd-text">Copy</button>
+      </div>
+      <a class="card-link" href="https://github.com/levarac/mizar#local-e2e-fixture-only-anvil-and-mockeas">README: Local E2E</a>
+    </article>
+  </div>
+  <p class="status-note">What has and has not been verified live, including the claim page and the first snapshot, is kept current in the <a href="https://github.com/levarac/mizar#sepolia-deployment">README deployment record</a>.</p>
+</section>
+
+<section id="how" aria-labelledby="how-title">
+  <div class="sec-head">
+    <p class="label"><span class="sq" aria-hidden="true"></span>How it works</p>
+    <h2 id="how-title">From a handshake of radios <span class="hl">to a claim in your wallet.</span></h2>
+  </div>
+
+  <ol class="steps">
+    <li class="step">
+      <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
+        <rect x="24" y="14" width="40" height="68" rx="8" class="ln"/>
+        <line x1="38" y1="22" x2="50" y2="22" class="ln"/>
+        <circle cx="44" cy="52" r="10" class="ln"/>
+        <path d="M78 48 H100" class="ln dash"/>
+        <rect x="104" y="30" width="36" height="36" class="fill"/>
+        <path d="M113 48 l6 6 l12 -13" class="ln-w"/>
+      </svg>
+      <p class="step-n mono">01</p>
+      <h3>Join and pass the human check</h3>
+      <p>Beid signs a typed challenge with its event key. Alcor binds one World ID to that event key for the event and publishes a signed credential.</p>
+    </li>
+    <li class="step">
+      <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
+        <rect x="18" y="16" width="36" height="62" rx="8" class="ln"/>
+        <rect x="106" y="16" width="36" height="62" rx="8" class="ln"/>
+        <path d="M64 38 q16 -10 32 0" class="ln"/>
+        <path d="M64 56 q16 10 32 0" class="ln"/>
+        <path d="M60 47 H100" class="ln-b"/>
+        <path d="M94 42 l6 5 l-6 5 M66 42 l-6 5 l6 5" class="ln-b"/>
+      </svg>
+      <p class="step-n mono">02</p>
+      <h3>Phones observe each other</h3>
+      <p>Beid signs BLE observations, and Parallax anchors their commitments on Sepolia. A pair counts only when both phones report each other's rotating identifiers in the same time window.</p>
+    </li>
+    <li class="step">
+      <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
+        <g class="grid">
+          <rect x="16" y="20" width="24" height="18" class="fill"/><rect x="44" y="20" width="24" height="18" class="ln"/><rect x="72" y="20" width="24" height="18" class="fill"/><rect x="100" y="20" width="24" height="18" class="ln"/>
+          <rect x="16" y="46" width="24" height="18" class="ln"/><rect x="44" y="46" width="24" height="18" class="fill"/><rect x="72" y="46" width="24" height="18" class="ln"/><rect x="100" y="46" width="24" height="18" class="fill"/>
+        </g>
+        <text x="132" y="34" class="t">2</text><text x="132" y="60" class="t">2</text>
+        <text x="16" y="86" class="t small-t">N = 2 · B = 2</text>
+      </svg>
+      <p class="step-n mono">03</p>
+      <h3>A fixed N/B rule</h3>
+      <p>Each eligible key needs <b>N</b> distinct credentialed partners, each seen in at least <b>B</b> five-minute windows. The <a href="https://github.com/levarac/mizar/blob/main/docs/demo/params-0xccb8770a.json">published demo parameters</a> set N = 2 and B = 2, and were published before any snapshot.</p>
+    </li>
+    <li class="step">
+      <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
+        <rect x="62" y="8" width="24" height="18" class="fill"/>
+        <path d="M74 26 V34 M40 34 H108 M40 34 V42 M108 34 V42" class="ln"/>
+        <rect x="28" y="42" width="24" height="16" class="ln"/><rect x="96" y="42" width="24" height="16" class="ln"/>
+        <path d="M40 58 V64 M20 64 H60 M20 64 V70 M60 64 V70 M108 58 V64 M88 64 H128 M88 64 V70 M128 64 V70" class="ln"/>
+        <rect x="12" y="70" width="16" height="12" class="ln"/><rect x="52" y="70" width="16" height="12" class="ln"/><rect x="80" y="70" width="16" height="12" class="ln"/><rect x="120" y="70" width="16" height="12" class="ln"/>
+      </svg>
+      <p class="step-n mono">04</p>
+      <h3>A snapshot root on Sepolia</h3>
+      <p>The evaluator writes a manifest, the eligible list and Merkle proofs. The configured root poster can post the root, the manifest's SHA-256 digest and a cutoff block to the claim contract.</p>
+    </li>
+    <li class="step">
+      <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
+        <rect x="18" y="16" width="36" height="62" rx="8" class="ln"/>
+        <path d="M28 50 l6 6 l12 -13" class="ln"/>
+        <path d="M64 47 H96" class="ln-b"/><path d="M90 41 l6 6 l-6 6" class="ln-b"/>
+        <rect x="104" y="28" width="42" height="38" rx="3" class="fill"/>
+        <rect x="128" y="40" width="18" height="14" class="ln-w"/>
+      </svg>
+      <p class="step-n mono">05</p>
+      <h3>Claim to your own wallet</h3>
+      <p>You choose a recipient wallet and Beid signs for it. The contract checks membership and the signature, allows one claim per event key and issues a non-revocable EAS attestation. Each claim is its own transaction.</p>
+    </li>
+  </ol>
+  <p class="after-steps">Anyone with the published inputs can rerun the evaluator and compare its result with the posted root.</p>
+</section>
+
+<section id="components" class="band" aria-labelledby="comp-title">
+  <div class="sec-head">
+    <p class="label"><span class="sq" aria-hidden="true"></span>Components</p>
+    <h2 id="comp-title">Two new pieces <span class="hl">on three existing ones.</span></h2>
+  </div>
+
+  <div class="comp-map">
+    <div class="comp-group comp-new">
+      <p class="label"><span class="sq" aria-hidden="true"></span>Built at ETHGlobal Tokyo 2026</p>
+      <div class="comp">
+        <h3><a href="https://github.com/levarac/mizar">Mizar</a></h3>
+        <p>Participation-rule evaluator and EAS claim system.</p>
+        <p class="tag mono">public repository</p>
+      </div>
+      <div class="comp">
+        <h3><a href="https://github.com/levarac/alcor">Alcor</a></h3>
+        <p>Human-check service and join page.</p>
+        <p class="tag mono">public repository</p>
+      </div>
+    </div>
+    <div class="comp-group comp-old">
+      <p class="label"><span class="sq sq-muted" aria-hidden="true"></span>Pre-existing before the hackathon</p>
+      <div class="comp">
+        <h3>Parallax</h3>
+        <p>Protocol for signed BLE observations and anchored evidence.</p>
+        <p class="tag mono">private repository</p>
+      </div>
+      <div class="comp">
+        <h3><a href="https://github.com/levarac/beid">Beid</a></h3>
+        <p>Attendee app that records and signs BLE observations. Its typed event-key signing entry point was added during the hackathon.</p>
+        <p class="tag mono">public repository</p>
+      </div>
+      <div class="comp">
+        <h3><a href="https://github.com/levarac/barnard">Barnard</a></h3>
+        <p>BLE sensing library and SDK.</p>
+        <p class="tag mono">public repository</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="rule" aria-labelledby="rule-title">
+  <div class="sec-head">
+    <p class="label"><span class="sq" aria-hidden="true"></span>Rule comparison</p>
+    <h2 id="rule-title">Same evidence, three rules. <span class="hl">Only the full rule excludes both.</span></h2>
+    <p class="sec-lede">The same signed inputs, evaluated with the human check switched off, with the encounter rule switched off, and with both. <strong class="rec">Recorded synthetic data. Not live, not posted.</strong></p>
+  </div>
+
+  <div class="table-wrap">
+    <table class="cmp">
+      <caption>Eligible event keys / event keys in the case. N = 2, B = 2.</caption>
+      <thead>
+        <tr><th scope="col">Case</th><th scope="col">No human check</th><th scope="col">No encounter rule</th><th scope="col" class="full">Full rule</th></tr>
+      </thead>
+      <tbody>
+        <tr><th scope="row">Honest attendees</th><td class="mono">3 / 3</td><td class="mono">3 / 3</td><td class="mono full">3 / 3</td></tr>
+        <tr><th scope="row">Mallory: one human, three phones</th><td class="mono">3 / 3</td><td class="mono">1 / 3</td><td class="mono full">0 / 3</td></tr>
+        <tr><th scope="row">Walk-in: credential, no encounters</th><td class="mono">0 / 1</td><td class="mono">1 / 1</td><td class="mono full">0 / 1</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="fine">Counts are eligible event keys, not issued on-chain records. Synthetic signatures test the rule and replay mechanics; they do not establish live World ID verification, physical presence or chain anchoring. <a href="https://github.com/levarac/mizar/blob/main/docs/demo/comparison.md">Full report and one-command reproduction</a>.</p>
+
+  <figure class="replay">
+    <a href="/graph/" class="replay-img"><img src="/img/graph-replay.png" width="1920" height="1080" loading="lazy" alt="Evidence replay: honest participants A, B and C pass with two partners each; Mallory's three phones fail; the walk-in fails. 3 of 7 keys pass."></a>
+    <figcaption>
+      <span>The evaluator's graph export for the same recorded synthetic data, replayed window by window.</span>
+      <a class="btn" href="/graph/">Open the interactive replay</a>
+    </figcaption>
+  </figure>
+</section>
+
+<section id="source" class="band" aria-labelledby="src-title">
+  <div class="sec-head">
+    <p class="label"><span class="sq" aria-hidden="true"></span>Source</p>
+    <h2 id="src-title">Read the code.</h2>
+  </div>
+  <ul class="repos">
+    <li><a href="https://github.com/levarac/mizar"><span class="mono">levarac/mizar</span><span>Evaluator, claim contract, claim page, E2E runner</span></a></li>
+    <li><a href="https://github.com/levarac/alcor"><span class="mono">levarac/alcor</span><span>Human-check service and join page</span></a></li>
+    <li><a href="https://github.com/levarac/beid"><span class="mono">levarac/beid</span><span>Attendee app</span></a></li>
+    <li><a href="https://github.com/levarac/barnard"><span class="mono">levarac/barnard</span><span>BLE sensing library and SDK</span></a></li>
+  </ul>
+</section>
+
+<section id="trust" class="trust" aria-labelledby="trust-title">
+  <p class="label"><span class="sq" aria-hidden="true"></span>Trust assumptions</p>
+  <p id="trust-title" class="trust-line">Alcor is a trusted attester: the service verifies World ID off-chain, and Mizar checks Alcor's signed credential rather than rerunning World's verification. Signed observations do not prove physical location.</p>
+  <a href="https://github.com/levarac/mizar#what-the-result-does-and-does-not-establish">What the result does and does not establish</a>
+</section>
+</main>
+
+<footer class="foot">
+  <div class="brand brand-foot"><img src="/img/logo-180.png" width="28" height="28" alt=""><span>Levarac</span></div>
+  <p>Built for ETHGlobal Tokyo 2026. Mizar's source is MIT licensed. Inter is used under the <a href="/fonts/OFL.txt">SIL Open Font License</a>. No trackers, no analytics.</p>
+</footer>
+<script src="/main.js" defer></script>
+</body>
+</html>
