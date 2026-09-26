@@ -1,5 +1,5 @@
-import { readFile, mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, join, resolve } from "node:path";
+import { readFile, mkdir, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { createHash } from "node:crypto";
 import type { Envelope } from "./evidence.js";
 
@@ -57,3 +57,19 @@ export async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, JSON.stringify(value, null, 2) + "\n");
 }
 export const inside = (root: string, child: string) => join(root, child);
+// The poster writes the archive, so a trusted file read from inside it is not trusted.
+// A remote archive's whole origin counts as inside: servers may map percent-encoded or
+// case-variant paths to the same file, so a path prefix cannot tell them apart.
+export async function insideArchive(source: string, archiveBase: string): Promise<boolean> {
+  const remoteSource = /^https:\/\//i.test(source), remoteArchive = /^https:\/\//i.test(archiveBase);
+  if (remoteSource || remoteArchive)
+    return remoteSource && remoteArchive && new URL(source).origin === new URL(archiveBase).origin;
+  // Resolve symlinks through the nearest existing ancestor, so a file that does not
+  // exist yet is compared on the same real path as the archive directory.
+  const real = async (path: string): Promise<string> => {
+    try { return await realpath(path); }
+    catch { const parent = dirname(path); return parent === path ? path : join(await real(parent), basename(path)); }
+  };
+  const inside = relative(await real(archiveBase), await real(resolve(source)));
+  return !(inside === ".." || inside.startsWith(".." + sep) || isAbsolute(inside));
+}
