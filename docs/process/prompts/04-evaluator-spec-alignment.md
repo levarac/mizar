@@ -19,4 +19,4 @@ Report the exact revision, commands, exit codes and counts. Use fixtures only an
 
 ## Later refinement
 
-The [follow-up verification review](12-evaluator-follow-up-review.md) adds the requirement that chain and registry identifiers come from the verifier independently of the poster's parameters. The earlier two-flag description above is historical, not a complete current chain-verification command.
+The [follow-up verification review](12-evaluator-follow-up-review.md) adds the requirement that chain and registry identifiers come from the verifier independently of the poster's parameters. The chain-context description above, which in the original brief named only `--rpc` and `--contract`, is historical and is not a complete current chain-verification command.

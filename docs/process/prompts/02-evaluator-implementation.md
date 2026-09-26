@@ -8,7 +8,7 @@ Build `evaluator/` in TypeScript with Node.js 22+, pnpm and Vitest according to 
 
 Implement observation-v1 COSE_Sign1 ES256K parsing and verification, Merkle inclusion checks, mutual-relation derivation, rotating-identifier ownership with conflict removal, the per-counterpart rule, and an OpenZeppelin standard Merkle tree over event-key addresses. Produce the manifest, eligible list, rejection list and proof files. Provide `evaluate`, `verify` and provisional `progress` CLI commands.
 
-Implement a read adapter for the published verification-envelope format. Test it with fixtures. Follow the pre-existing protocol definition where required, and identify ported logic in file headers.
+Implement a read adapter for the evidence layer's verification-envelope format. Test it with fixtures. Follow the pre-existing protocol definition where required, and identify ported logic in file headers.
 
 ## Fixtures and acceptance criteria
 

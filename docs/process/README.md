@@ -2,6 +2,8 @@
 
 The maintainer made the design decisions recorded in [docs/design/decisions.md](../design/decisions.md). AI coding agents implemented each component under [docs/design/spec.md](../design/spec.md), and a separate AI agent reviewed each branch before integration. The team retained responsibility for the rule, design, scope and integration decisions.
 
+Most briefs were drafted by a coordinating AI agent from the maintainer's direction and the specification.
+
 This archive contains edited, sanitized versions of the instructions used during development. It is not a verbatim transcript or a complete conversation history. Eighteen source texts were supplied: fifteen implementation, review and correction briefs are represented below; three planning briefs are summarized in the next section. Local setup details, identities, account information and unpublished source references have been removed. Repeated constraints are consolidated here. No code from the pre-existing reference implementation is reproduced.
 
 The numbering follows development phases and the known revision order within each component. Components were developed in parallel, and the source copies do not preserve original send times, so the numbers do not assert a precise chronology across components. Earlier instructions that were superseded are labeled explicitly. The specification remains the implementation authority.
@@ -14,9 +16,9 @@ The three planning briefs describe these successive stages:
 
 1. **Initial component plan.** Build the claim contract, evaluator and Alcor human-check service from the shared specification. Use the same app-signature bytes, event-key address derivation, Merkle leaf encoding and golden vectors across all components. Resolve specification ambiguities explicitly. After contract and evaluator review, add the claim page and a local end-to-end rehearsal.
 2. **Specification alignment and follow-up review.** The contract was already integrated. The evaluator needed the exact manifest-byte digest and the refined signer-attribution rule from decision D11. Alcor needed a new review of the overlapping-challenge correction. Keep the app, service and contract signing formats consistent, and report each review against its exact revision before integration.
-3. **Integration and submission plan.** Review the evaluator's strengthened chain verification, then update the E2E rehearsal to consume the evaluator result and verify it again. Continue claim-page and submission-documentation work. Keep local package installation isolated from any enclosing pnpm workspace. Retain the distinction between fixture checks and a future live demonstration.
+3. **Integration and submission plan.** Review the evaluator's strengthened chain verification. After the evaluator is integrated, bring the already-reviewed evaluator-backed E2E rehearsal up to date with main, correct a low-severity wording issue, rerun it and check it again. Then start live anchor-to-block mapping and live progress work, and continue the submission documentation. Keep local package installation isolated from any enclosing pnpm workspace. Retain the distinction between fixture checks and a future live demonstration.
 
-The planning briefs also called for review of the full affected component after corrections, rather than treating a small diff as sufficient evidence of correctness. Integration followed a separate review; the implementing AI agent did not supply its own review verdict.
+The planning briefs required a fresh independent review after each round of corrections, and the review prompts asked for the full affected component rather than treating a small diff as sufficient evidence of correctness. Integration followed a separate review; the implementing AI agent did not supply its own review verdict.
 
 ## Shared constraints from the prompts
 

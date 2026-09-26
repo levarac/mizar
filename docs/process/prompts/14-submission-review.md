@@ -4,7 +4,7 @@ Sanitized read-only review prompt for Mizar revision `b0f432e`. The [shared cons
 
 ## Checklist
 
-1. Verify every factual statement against its cited source revision: Mizar contract source `b755abc`, evaluator `eae54bc`, E2E `c9c7f1d`, and Alcor `b016899`. Identify anything described as complete that is unfinished, unresolved links, or moving references incorrectly described as pinned.
+1. Verify every factual statement against its cited source revision: Mizar main `b755abc`, evaluator `eae54bc`, E2E `c9c7f1d`, and Alcor `b016899`. Identify anything described as complete that is unfinished, unresolved links, or moving references incorrectly described as pinned.
 2. Check the completeness of pre-existing-work disclosure: initial commits, ported files and the existing app/protocol work. Do not infer that repository creation during the event makes every underlying algorithm new.
 3. Check public-document hygiene: English text, no confidential values, personal identifiers or internal coordination details. Use role descriptions for unpublished repositories unless naming is expressly authorized.
 4. Keep video, deployed addresses, schema UID, live World verification, real-device flow and live claim clearly pending where unverified.
