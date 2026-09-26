@@ -62,8 +62,10 @@ verify returns `UNAVAILABLE`.
 
 - `inputs/params.json` in the archive is written by the poster and is never a
   trust anchor. `--trusted-params` must be the parameters file published before
-  the snapshot, obtained from outside the archive; a path or URL inside the
-  manifest's directory is refused with `UNAVAILABLE`. **Pending:** where the
+  the snapshot, obtained from outside the archive. A path inside the manifest's
+  directory, or any URL on a remote manifest's origin, is refused with
+  `UNAVAILABLE`. This guard only catches the mistake; a copy of the poster's
+  file kept elsewhere passes it. **Pending:** where the
   organizer publishes these parameters, and a poster-independent digest to pin
   them, are not decided yet. Until then `--trusted-params-sha256` lets the
   verifier check its copy against a digest obtained out of band; a mismatch is
@@ -93,8 +95,10 @@ verify returns `UNAVAILABLE`.
   cutoff block, and the SHA-256 of the exact written manifest bytes. The
   contract's snapshots are private, so the event is the public read surface.
 
-Log reads start at `--from-block` (a trusted lower bound such as the registry
-deployment block; default 0). A range the RPC rejects as too wide or too large
+Log reads start at `--from-block` (default 0). Use the commitment registry's
+deployment block. A later block, such as the event's registration block, is
+safe only if the registry refuses commitments recorded before registration;
+otherwise it can hide an omitted commitment. A range the RPC rejects as too wide or too large
 is split in half down to 100 blocks; any other RPC error, or more than 500
 `eth_getLogs` calls, is `UNAVAILABLE`. Only failures of sources the verifier
 chose (the manifest fetch, the RPC, the trusted parameters and credential list)
