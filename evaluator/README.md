@@ -40,28 +40,53 @@ returns `UNAVAILABLE` and does not settle a root. It archives the fetched
 inputs and derived mapping under the output directory for offline replay.
 
 `verify` recomputes the root and the sorted eligibility, rejection, and proof
-outputs from the archived inputs. Without `--rpc` it compares with the
-manifest root; the anchor-to-block sidecar and cutoff timestamp are then taken
-from the archive as written. With `--rpc` and `--contract` it checks the chain:
+outputs from the archived inputs. Observation bytes that do not hash to their
+committed digest make the archive invalid (`invalid_signature`). Without
+`--rpc` it compares with the manifest root only; every input, including the
+parameters, the anchor-to-block sidecar and the credential list, is then taken
+from the archive as the poster wrote it. With `--rpc` and `--contract` it checks
+the snapshot against sources the verifier chooses:
 
 ```sh
 pnpm mizar verify --manifest dir/manifest.json --rpc <url> --contract <claim> \
-  --chain-id 11155111 --event-registry <addr> --definition-registry <addr> \
-  --commitment-registry <addr>
+  --trusted-params <published params.json> --chain-id 11155111 \
+  --event-registry <addr> --definition-registry <addr> --commitment-registry <addr> \
+  [--credentials-source <Alcor list URL or file>]
 ```
 
-The chain ID and the three registry addresses must come from the verifier,
-not from the poster-written parameters. This repository does not pin the
-evidence layer's Sepolia registry addresses, so without these flags an
-on-chain verify returns `UNAVAILABLE`. Registry values in the parameters are
-only cross-checked against the flags; a difference is a `FAIL`. The verifier
-then rechecks the event registration and definition anchor, maps every
-commitment to its registry block, requires every commitment anchored at or
-before the cutoff to be in the inputs, and compares the cutoff block
-timestamp. Finally it reads the claim contract's `RootPosted` event and
-compares its root, cutoff block, and SHA-256 of the exact written manifest
-bytes. The contract's snapshots are private, so the event is the public read
-surface.
+The parameters file inside the archive is written by the poster, so every
+trust anchor comes from these flags instead. This repository does not pin the
+evidence layer's Sepolia registry addresses, so without the flags an on-chain
+verify returns `UNAVAILABLE`.
+
+- `--trusted-params` is the parameters file published before the snapshot. Its
+  `evaluatorVersion`, `eventId`, `chainId`, `minPartners`,
+  `minWindowsPerPartner`, `credentialsPublicKey`, `snapshot.id` and
+  `snapshot.cutoffBlock` must equal the archived parameters; a difference is a
+  `FAIL`, a missing field is `UNAVAILABLE`.
+- Registry addresses in the archived parameters are cross-checked against the
+  registry flags; a difference is a `FAIL`. An RPC serving another chain is
+  `UNAVAILABLE`.
+- The credential list is re-read from `--credentials-source`, or from the
+  trusted parameters' `credentialsSource`. Every entry that verifies and was
+  verified by the cutoff must be in the archived list; an omission is a `FAIL`,
+  an unreachable list is `UNAVAILABLE`. The list only grows, so later entries
+  are ignored.
+- The event registration must match, and the admission must carry the latest
+  definition anchored by the cutoff. Every commitment is mapped to its registry
+  block, every commitment anchored at or before the cutoff must be in the
+  inputs, and the cutoff block timestamp must match.
+- Finally the claim contract's `RootPosted` event must match the root, the
+  cutoff block, and the SHA-256 of the exact written manifest bytes. The
+  contract's snapshots are private, so the event is the public read surface.
+
+Log reads split a block range in half when the RPC rejects it. RPC failures
+are `UNAVAILABLE`, never a `FAIL`. None of this has been run against a live
+Sepolia RPC; the suite uses a local JSON-RPC stub.
+
+Future work: the credential omission check trusts whatever list the verifier
+fetches. A list head signed by Alcor (entry count plus digest per cutoff) would
+let an archive prove completeness on its own.
 
 The public verification-envelope API currently returns `bundle: null`. It
 cannot expose bundled delegation certificates or support recomputation of the

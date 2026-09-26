@@ -303,7 +303,7 @@ describe("CLI receipt", () => {
       expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 30_000);
-  it("checks RootPosted and registry anchors against a fixture JSON-RPC stub", async () => {
+  it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub", async () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
     const registries = { eventRegistry: "0x00000000000000000000000000000000000000e1",
@@ -311,13 +311,14 @@ describe("CLI receipt", () => {
       commitmentRegistry: "0x00000000000000000000000000000000000000a1" };
     const [page] = pages, admission = page.admission, anchor = page.commitments[0].anchor;
     const abi = AbiCoder.defaultAbiCoder(), word = (value: string | number) => zeroPadValue(toBeHex(value), 32);
-    const cutoff = params.snapshot.cutoffBlock;
+    const cutoff = params.snapshot.cutoffBlock, head = 5_000, rangeCap = 1_500;
     let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
-    let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest], extraCommitment = false;
+    let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest];
+    let extraCommitment = false, extraDefinition = false, rpcDown = false;
     const log = (address: string, block: number, topics: string[], data: string) => ({
       address, blockNumber: toBeHex(block), blockHash: "0x" + "11".repeat(32),
       transactionHash: "0x" + "22".repeat(32), transactionIndex: "0x0", logIndex: "0x0", removed: false, topics, data });
-    // Offline JSON-RPC stub: serves the three registry events, the cutoff block and one RootPosted log.
+    // Offline JSON-RPC stub: the three registry events, the cutoff block and one RootPosted log.
     const logsFor = (topic0: string) => {
       if (topic0 === id("EventRegistered(bytes32,address,address,bytes32,uint64)"))
         return [log(registries.eventRegistry, 10, [topic0, "0x" + page.context,
@@ -327,9 +328,11 @@ describe("CLI receipt", () => {
           admission.anchorRegistration.registeredAt]))];
       if (topic0 === id("EventDefinitionAnchored(bytes32,uint64,bytes32,bytes32,uint64,uint64,uint64)")) {
         const d = admission.definitionAnchor;
-        return [log(registries.definitionRegistry, 20, [topic0, "0x" + page.context, word(d.sequence),
-          "0x" + d.definitionDigest], abi.encode(["bytes32", "uint64", "uint64", "uint64"],
-          ["0x" + d.previousDefinitionDigest, d.validFrom, d.validUntil, d.anchoredAt]))];
+        const definition = (sequence: number, digest: string, previous: string, block: number) =>
+          log(registries.definitionRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
+            abi.encode(["bytes32", "uint64", "uint64", "uint64"], ["0x" + previous, d.validFrom, d.validUntil, d.anchoredAt]));
+        return [definition(d.sequence, d.definitionDigest, d.previousDefinitionDigest, 20),
+          ...(extraDefinition ? [definition(d.sequence + 1, "cd".repeat(32), d.definitionDigest, 30)] : [])];
       }
       if (topic0 === id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")) {
         const commitment = (sequence: number, digest: string, previous: string, block: number) =>
@@ -342,20 +345,26 @@ describe("CLI receipt", () => {
       return !postedLogPresent ? [] : [log(contract, cutoff + 5, [topic0, word(params.snapshot.id)],
         abi.encode(["bytes32", "bytes32", "uint64"], [posted.root, posted.manifestDigest, posted.cutoffBlock]))];
     };
+    // Like public RPCs, the stub rejects wide getLogs ranges, so the reader must page.
+    const getLogs = (filter: { fromBlock: string; toBlock: string; topics: string[] }) => {
+      const from = Number(filter.fromBlock), to = filter.toBlock === "latest" ? head : Number(filter.toBlock);
+      if (rpcDown || to - from + 1 > rangeCap) return { error: { code: -32005, message: "block range too large" } };
+      return { result: logsFor(filter.topics[0]).filter(l => Number(l.blockNumber) >= from && Number(l.blockNumber) <= to) };
+    };
     const server = createServer((req, res) => {
       let body = "";
       req.on("data", chunk => { body += chunk; });
       req.on("end", () => {
         const request = JSON.parse(body);
         const answer = (r: { id: number; method: string; params: any[] }) => ({ jsonrpc: "2.0", id: r.id,
-          result: r.method === "eth_chainId" ? toBeHex(params.chainId)
-            : r.method === "eth_blockNumber" ? toBeHex(cutoff + 10)
+          ...(r.method === "eth_getLogs" ? getLogs(r.params[0]) : { result:
+            r.method === "eth_chainId" ? toBeHex(params.chainId)
+            : r.method === "eth_blockNumber" ? toBeHex(head)
             : r.method === "eth_getBlockByNumber" ? {
               number: r.params[0], hash: "0x" + "33".repeat(32), parentHash: "0x" + "44".repeat(32),
               timestamp: toBeHex(params.snapshot.cutoffTimestamp), nonce: "0x0000000000000000",
               difficulty: "0x0", gasLimit: "0x1c9c380", gasUsed: "0x0", baseFeePerGas: "0x1",
-              miner: "0x" + "00".repeat(20), extraData: "0x", transactions: [] }
-            : r.method === "eth_getLogs" ? logsFor(r.params[0].topics[0]) : null });
+              miner: "0x" + "00".repeat(20), extraData: "0x", transactions: [] } : null }) });
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify(Array.isArray(request) ? request.map(answer) : answer(request)));
       });
@@ -369,76 +378,103 @@ describe("CLI receipt", () => {
       child.stdout.on("data", chunk => { stdout += chunk; });
       child.on("close", status => done({ status, stdout }));
     });
+    const fixtures = join(root, "test/fixtures");
+    const published = { ...params, ...registries, evidenceSource: join(fixtures, "envelopes.json"),
+      credentialsSource: join(fixtures, "credentials.json"), anchorBlocksSource: join(fixtures, "anchor-blocks.json"),
+      pendingSource: undefined };
+    const trustedParams = join(out, "published-params.json");
+    writeFileSync(trustedParams, JSON.stringify(published));
+    // Evaluate as the poster would, with possibly altered parameters, and post that result.
+    const evaluateAs = async (name: string, changes: Record<string, unknown> = {}) => {
+      const file = join(out, name + "-params.json"), dir = join(out, name);
+      writeFileSync(file, JSON.stringify({ ...published, ...changes }));
+      const evaluated = await run("evaluate", "--params", file, "--out", dir);
+      expect(evaluated.status).toBe(0);
+      const receipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
+      posted = { root: receipt.root, manifestDigest: receipt.manifestDigest, cutoffBlock: cutoff };
+      return { manifest: join(dir, "manifest.json"), receipt };
+    };
+    const trust = (overrides: Record<string, string>) => Object.entries({ "trusted-params": trustedParams,
+      "chain-id": String(params.chainId), "event-registry": registries.eventRegistry,
+      "definition-registry": registries.definitionRegistry, "commitment-registry": registries.commitmentRegistry,
+      ...overrides }).flatMap(([k, v]) => ["--" + k, v]);
+    const verifyOnChain = (manifest: string, overrides: Record<string, string> = {}) =>
+      run("verify", "--manifest", manifest, "--rpc", rpc, "--contract", contract, ...trust(overrides));
+    const expectFail = async (manifest: string, reason?: string, overrides: Record<string, string> = {}) => {
+      const failed = await verifyOnChain(manifest, overrides);
+      expect(failed.stdout).toContain('"fault":"root_mismatch"');
+      expect(failed.status).toBe(1);
+      if (reason) expect(failed.stdout).toContain(reason);
+    };
+    const expectUnavailable = async (manifest: string, reason: string, overrides: Record<string, string> = {}) => {
+      const result = await verifyOnChain(manifest, overrides);
+      expect(result.stdout).toContain('"result":"UNAVAILABLE"');
+      expect(result.status).toBe(2);
+      expect(result.stdout).toContain(reason);
+    };
     try {
-      // Registry-less parameters leave the anchor sidecar unchecked: never PASS.
+      // Without verifier-supplied trust anchors an on-chain check never passes.
       const plain = join(out, "plain");
       expect((await run("evaluate", "--params", "test/fixtures/params.json", "--out", plain)).status).toBe(0);
       const unbacked = await run("verify", "--manifest", join(plain, "manifest.json"), "--rpc", rpc, "--contract", contract);
       expect(unbacked.status).toBe(2);
       expect(unbacked.stdout).toContain('"result":"UNAVAILABLE"');
-      expect(unbacked.stdout).toContain("--commitment-registry");
+      expect(unbacked.stdout).toContain("--trusted-params");
 
-      const paramsFile = join(out, "params.json");
-      const fixtures = join(root, "test/fixtures");
-      writeFileSync(paramsFile, JSON.stringify({ ...params, ...registries,
-        evidenceSource: join(fixtures, "envelopes.json"), credentialsSource: join(fixtures, "credentials.json"),
-        anchorBlocksSource: join(fixtures, "anchor-blocks.json"), pendingSource: undefined }));
-      const result = join(out, "registry");
-      const evaluated = await run("evaluate", "--params", paramsFile, "--out", result);
-      expect(evaluated.status).toBe(0);
-      const receipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
-      const trust = (overrides: Record<string, string> = {}) => Object.entries({ "chain-id": String(params.chainId),
-        "event-registry": registries.eventRegistry, "definition-registry": registries.definitionRegistry,
-        "commitment-registry": registries.commitmentRegistry, ...overrides }).flatMap(([k, v]) => ["--" + k, v]);
-      const verifyOnChain = (overrides: Record<string, string> = {}) => run("verify", "--manifest",
-        join(result, "manifest.json"), "--rpc", rpc, "--contract", contract, ...trust(overrides));
-      const good = { root: receipt.root, manifestDigest: receipt.manifestDigest, cutoffBlock: cutoff };
-      posted = good;
-      const pass = await verifyOnChain();
+      const honest = await evaluateAs("honest");
+      const pass = await verifyOnChain(honest.manifest);
       expect(pass.stdout).toContain('"result":"PASS"');
       expect(pass.status).toBe(0);
-      const wrongChain = await verifyOnChain({ "chain-id": "1" });
-      expect(wrongChain.status).toBe(2);
-      expect(wrongChain.stdout).toContain("is not the trusted chain ID 1");
-      // A poster-chosen registry in the params cannot replace the verifier's own.
-      const otherRegistry = await verifyOnChain({ "commitment-registry": "0x00000000000000000000000000000000000000a2" });
-      expect(otherRegistry.status).toBe(1);
-      expect(otherRegistry.stdout).toContain('"fault":"root_mismatch"');
-      expect(otherRegistry.stdout).toContain("different commitmentRegistry");
+      await expectUnavailable(honest.manifest, "is not the trusted chain ID 1", { "chain-id": "1" });
+      await expectFail(honest.manifest, "different commitmentRegistry",
+        { "commitment-registry": "0x00000000000000000000000000000000000000a2" });
+      await expectUnavailable(honest.manifest, "trusted credential list unavailable",
+        { "credentials-source": join(out, "absent.json") });
       const flip = (value: string) => value.slice(0, -1) + (parseInt(value.slice(-1), 16) ^ 1).toString(16);
+      const good = { ...posted };
       for (const [change, reason] of [
-        [{ manifestDigest: flip(receipt.manifestDigest) }, "manifest_digest_mismatch"],
+        [{ manifestDigest: flip(good.manifestDigest) }, "manifest_digest_mismatch"],
         [{ cutoffBlock: cutoff + 1 }, "cutoff_block_mismatch"],
-        [{ root: flip(receipt.root) }, undefined],
+        [{ root: flip(good.root) }, undefined],
       ] as const) {
         posted = Object.assign({ ...good }, change);
-        const failed = await verifyOnChain();
-        expect(failed.status).toBe(1);
-        expect(failed.stdout).toContain('"fault":"root_mismatch"');
-        if (reason) expect(failed.stdout).toContain(reason);
+        await expectFail(honest.manifest, reason);
       }
       posted = good;
       // The sidecar says block 90; the registry anchored the commitment after the cutoff.
       anchorBlock = cutoff + 1;
-      const moved = await verifyOnChain();
-      expect(moved.status).toBe(1);
-      expect(moved.stdout).toContain('"fault":"root_mismatch"');
-      expect(moved.stdout).toContain("archived anchor block mapping differs from chain");
+      await expectFail(honest.manifest, "archived anchor block mapping differs from chain");
       anchorBlock = anchors[anchor.commitmentDigest];
       extraCommitment = true;
-      const omitted = await verifyOnChain();
-      expect(omitted.status).toBe(1);
-      expect(omitted.stdout).toContain('"fault":"root_mismatch"');
-      expect(omitted.stdout).toContain("commitment anchored before cutoff missing from evidence");
+      await expectFail(honest.manifest, "commitment anchored before cutoff missing from evidence");
       extraCommitment = false;
+      // A newer definition anchored by the cutoff would make the archived admission stale.
+      extraDefinition = true;
+      await expectFail(honest.manifest, "latest definition anchor differs from chain");
+      extraDefinition = false;
+      rpcDown = true;
+      await expectUnavailable(honest.manifest, "RPC unavailable");
+      rpcDown = false;
       postedLogPresent = false;
-      const missing = await verifyOnChain();
-      expect(missing.status).toBe(2);
-      expect(missing.stdout).toContain('"result":"UNAVAILABLE"');
-      expect(missing.stdout).toContain("RootPosted event unavailable");
+      await expectUnavailable(honest.manifest, "RootPosted event unavailable");
+      postedLogPresent = true;
+
+      // m1: the poster drops a verified participant's credential from its input.
+      const list = structuredClone(credentials);
+      list.credentials = list.credentials.filter(c => c.eventKeyAddress !== credentials.credentials[0].eventKeyAddress);
+      const reduced = join(out, "reduced-credentials.json");
+      writeFileSync(reduced, JSON.stringify(list));
+      const m1 = await evaluateAs("m1", { credentialsSource: reduced });
+      expect(m1.receipt.root).not.toBe(honest.receipt.root);
+      await expectFail(m1.manifest, "credential verified before cutoff missing from inputs");
+      // m2: the poster pins its own attestation key; m4: the poster lowers the thresholds.
+      const m2 = await evaluateAs("m2", { credentialsPublicKey: "0x" + "11".repeat(32) });
+      await expectFail(m2.manifest, "different credentialsPublicKey");
+      const m4 = await evaluateAs("m4", { minPartners: 1, minWindowsPerPartner: 1 });
+      await expectFail(m4.manifest, "different minPartners");
     } finally {
       server.close();
       rmSync(out, { recursive: true, force: true });
     }
-  }, 120_000);
+  }, 240_000);
 });
