@@ -36,7 +36,7 @@ Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` in
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
 
-The claim page configuration is still an example. Alcor's example bindings do not enable a live World check. Passing local tests does not establish a deployed or working live join-to-claim flow.
+The claim page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Alcor's example bindings do not enable a live World check. Passing local tests does not establish a deployed or working live join-to-claim flow.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The Mizar claim deployment and live web configuration are pending; the local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The claim-page deployment and first snapshot are pending; the local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -98,13 +98,13 @@ The contract also vendors upstream EAS and OpenZeppelin dependencies; versions a
 
 ## Sepolia deployment
 
-**Not deployed yet.** No Mizar claim-contract address or registered Mizar schema UID is available for this submission snapshot.
+The following Sepolia deployment details were supplied on 2026-09-26. The first posted root and live claim are still pending; this claim-page preparation did not independently query the chain.
 
 | Item | Status |
 | --- | --- |
-| Mizar claim contract address | Not deployed yet |
-| Mizar EAS schema UID | Not registered yet |
-| Public root / claim transaction | Pending deployment and an approved live run |
+| Mizar claim contract address | `0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC` ([deployment transaction](https://sepolia.etherscan.io/tx/0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324)) |
+| Mizar EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` ([registration transaction](https://sepolia.etherscan.io/tx/0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b)) |
+| Public root / claim transaction | Pending the first snapshot and an approved live run |
 
 The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments.
 
@@ -157,10 +157,11 @@ Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid
 cd web
 pnpm install --frozen-lockfile
 pnpm test
+pnpm typecheck
 pnpm build
 ```
 
-These are local tests and a static build. `web/src/config.ts` contains example values and must be configured for a real event. A successful build is not a verified app callback or wallet transaction.
+These are local tests and a static build. The build intentionally fails until `web/public/claim-config.json` and its snapshot assets are complete. The [Worker configuration and release instructions](web/README.md) describe the fixed URL, public RPC, same-origin assets and local dry-run. A successful build is not a verified app callback or wallet transaction.
 
 During callback handling, the page replaces a stored claim only after fully verifying the callback: a pending request must exist, its state must match, the public key must derive the supplied event-key address, and the signature must verify against that key for the configured event, chain, contract and pending recipient. A rejected or malformed callback leaves the stored claim unchanged. See [`web/src/main.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/main.ts) and [`web/src/codec.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/codec.ts). The historical test results below predate this callback fix.
 
