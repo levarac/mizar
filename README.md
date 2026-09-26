@@ -1,5 +1,13 @@
 # Mizar
 
+Mizar is part of **Levarac**, the team and project name used for ETHGlobal Tokyo 2026 and its Showcase listing. Levarac comprises:
+
+- **Parallax** — protocol for signed BLE observations and anchored evidence; pre-existing before the hackathon; private repository.
+- **[Beid](https://github.com/levarac/beid)** — attendee app that records and signs BLE observations; pre-existing before the hackathon; public repository.
+- **[Barnard](https://github.com/levarac/barnard)** — BLE sensing library and SDK; pre-existing before the hackathon; public repository.
+- **[Mizar](https://github.com/levarac/mizar)** — participation-rule evaluator and EAS claim system; built at ETHGlobal Tokyo 2026; public repository.
+- **[Alcor](https://github.com/levarac/alcor)** — human-check service and join page; built at ETHGlobal Tokyo 2026; public repository.
+
 Mizar makes eligibility recomputable from published inputs: an event key must have signed mutual observations with at least N distinct Alcor-credentialed partner keys in at least B time windows per partner, and each claimant needs an Alcor distinct-human credential; this proves satisfaction of the published rule under its evidence and credential trust assumptions, not physical attendance, freedom from relay or collusion, or independent on-chain verification of World ID.
 
 Built for ETHGlobal Tokyo 2026. Hacking started **2026-09-25 21:00 JST**; the submission deadline is **2026-09-27 09:00 JST**.
@@ -8,8 +16,8 @@ Built for ETHGlobal Tokyo 2026. Hacking started **2026-09-25 21:00 JST**; the su
 
 ## How it works
 
-1. **Join and check the person.** The existing attendee app signs a typed challenge with its event key. At join time, [Alcor](https://github.com/levarac/alcor) binds one World ID to that event key for the event and publishes a signed credential. At evaluation, Mizar checks the published credential list as of the snapshot cutoff block's timestamp, pins Alcor's signing public key, and checks both the service signature and the app signature. Only the first verified key for each nullifier counts for the event, including partners who never claim.
-2. **Collect mutual observations.** The app signs BLE observations. The existing operator service collects them and anchors ordered commitments in the existing Sepolia evidence registry. Mizar checks observation signatures, event context, commitment signatures and observation inclusion proofs. Live evaluation also checks registry records and the commitment-to-block mapping at the snapshot cutoff.
+1. **Join and check the person.** Beid signs a typed challenge with its event key. At join time, [Alcor](https://github.com/levarac/alcor) binds one World ID to that event key for the event and publishes a signed credential. At evaluation, Mizar checks the published credential list as of the snapshot cutoff block's timestamp, pins Alcor's signing public key, and checks both the service signature and the app signature. Only the first verified key for each nullifier counts for the event, including partners who never claim.
+2. **Collect mutual observations.** Beid signs BLE observations. The Parallax operator service collects them and anchors ordered commitments in the Parallax Sepolia evidence registry. Mizar checks observation signatures, event context, commitment signatures and observation inclusion proofs. Live evaluation also checks registry records and the commitment-to-block mapping at the snapshot cutoff.
 3. **Apply a fixed rule.** An observation pair counts only when both devices report each other's rotating identifiers in the same event, definition and time window. Identifiers claimed by multiple signing keys are dropped. Key pairs accumulate distinct windows; each eligible key needs N credentialed partners with at least B windows **per partner**. The fixture uses N = 2 and B = 2. There is no iterative removal of partners.
 4. **Publish a snapshot.** The evaluator writes `manifest.json`, `eligible.json`, `rejected.json` and `proofs/<lowercase-address>.json`. Leaves contain event-key addresses. The configured root poster can post a snapshot root, the SHA-256 digest of the exact manifest bytes and a cutoff block to the claim contract.
 5. **Claim individually.** The claim page asks for a recipient wallet and obtains a typed app signature bound to the event, chain, contract and recipient. The contract verifies membership and the signature, permits one claim per event key across snapshots, and calls EAS to issue a non-revocable attestation. Eligibility is batched into a root; each claim is a separate transaction.
@@ -19,7 +27,7 @@ Built for ETHGlobal Tokyo 2026. Hacking started **2026-09-25 21:00 JST**; the su
 
 Alcor is a **trusted attester** for the distinct-human check. Mizar verifies its credential signature and event-key binding; it does not rerun World's verification. The contract trusts a deployer-configured poster to choose roots. A Merkle proof establishes membership in a posted root; public recomputation checks whether that root follows the rule. There is no on-chain dispute or challenge mechanism.
 
-Signed observations do not establish physical location or prevent cooperating participants from fabricating or relaying observations. The evidence API's `bundle: null` responses do not expose delegation certificates or allow the committed bundle digest to be rebuilt. Mizar uses the observation's own signing key and makes no delegated-provenance claim from those responses. See [the implementation spec](docs/design/spec.md) and [design decisions](docs/design/decisions.md).
+Signed observations do not establish physical location or prevent cooperating participants from fabricating or relaying observations. The Parallax evidence API's `bundle: null` responses do not expose delegation certificates or allow the committed bundle digest to be rebuilt. Mizar uses the observation's own signing key and makes no delegated-provenance claim from those responses. See [the implementation spec](docs/design/spec.md) and [design decisions](docs/design/decisions.md).
 
 Public inputs expose event keys and their observation relationships. Claiming creates a public event-key-to-wallet link. Anonymous claims are outside this build. Live progress is also unfinished: the supported pending feed is a labeled synthetic fixture, and progress never authorizes a claim.
 
@@ -44,7 +52,7 @@ The claim page's camera-ready design and read-only rule card are merged at `a798
 
 The [comparison report and one-command reproduction](docs/demo/comparison.md)
 run the same recorded synthetic evidence through three rules: no human check,
-no encounter rule, and the full rule. It covers honest attendees, Mallory's
+no encounter rule, and the full rule. It covers honest attendees,
 three phones sharing one human credential, and a credentialed walk-in with no
 encounters. All comparison output is **NON-CANONICAL**: eligibility counts
 only, with no manifest, claim proofs or exported root. This is not a live
@@ -56,10 +64,10 @@ snapshot and has not been posted.
 flowchart TD
     World[World ID / IDKit 4]
     EAS[EAS on Sepolia]
-    subgraph Existing[Pre-existing evidence layer]
-        SDK[Barnard BLE SDK] --> App[Attendee app]
-        App -->|Signed observations| Operator[Operator service]
-        Operator -->|Ordered commitments| Registry[Sepolia commitment registry]
+    subgraph Existing[Pre-existing Parallax, Beid and Barnard]
+        SDK[Barnard BLE SDK] --> App[Beid attendee app]
+        App -->|Signed observations| Operator[Parallax operator service]
+        Operator -->|Ordered commitments| Registry[Parallax Sepolia commitment registry]
         Operator -->|Published verification data| Evidence[Signed evidence and inclusion proofs]
     end
 
@@ -84,7 +92,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging; the claim page and first snapshot are still pending. The local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging; the claim page and first snapshot are still pending. The local E2E run substitutes Anvil and MockEAS. Beid itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -92,19 +100,19 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 
 Pre-existing parts supplied by the team:
 
-- The entire **Beid** attendee-app repository was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
-- The evidence layer was likewise pre-existing as a whole: the operator service, Sepolia evidence contracts and protocol reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
+- The entire **[Beid](https://github.com/levarac/beid)** attendee-app repository was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. Beid records and signs BLE proximity observations; its repository is public.
+- The **Parallax** protocol was likewise pre-existing as a whole: its operator service, Sepolia evidence contracts and reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The Parallax evidence contracts are separate from the new Mizar claim contract; the Parallax repository is private.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
 Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record.
 
-The app-side typed signing entry point is new hackathon work inside Beid. It becomes open source when the Beid repository is made public; that publication is in preparation. **Public Beid repository link: pending confirmed publication.** The link will be added once publication is confirmed. This README's local checks do not independently verify the app-side integration.
+The hackathon changes to Beid, a typed event-key signing entry point and a two-iPhone demo configuration, are on [Beid's `demo/ethtokyo-two-iphone` branch](https://github.com/levarac/beid/tree/demo/ethtokyo-two-iphone) at head [5a848fb](https://github.com/levarac/beid/commit/5a848fb1d07bae01ec5a9b5550f0e13bca6fdf6e). Beid's repository is public, but this README's local checks do not independently verify the app-side integration.
 
-Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
+Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers referring to Parallax, and one function reimplements a pre-existing definition:
 
 - [evaluator/src/codec.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/codec.ts): wire domains and canonical COSE rules.
 - [evaluator/src/evidence.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evidence.ts): observation, commitment and receipt domains, admission fields and inclusion-tree rules.
-- [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing evidence-layer protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
+- [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing Parallax protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
 
 The contract also vendors upstream EAS and OpenZeppelin dependencies; versions and commit references are listed in [contracts/README.md](contracts/README.md).
 
@@ -136,7 +144,7 @@ The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `111
 | Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — design and rule card merged; deployment pending the first non-empty snapshot |
 | Public root / claim transaction | Pending the first non-empty snapshot and a live claim |
 
-The root poster was configured to be the event registrar; the contract does not derive it from the registry. The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
+The root poster was configured to be the event registrar; the contract does not derive it from the registry. The Parallax evidence registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
 
 The demo's [event-level parameter baseline](docs/demo/params-0xccb8770a.json) was published before any snapshot and merged at `c5fd44f` on **2026-09-26**, with exact-file SHA-256 `1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08`. It intentionally omits snapshot values and cannot be used alone as `--trusted-params`. See the [publication instructions](docs/demo/README.md) for each snapshot's complete parameter file, independent digest and verification command.
 
@@ -175,7 +183,7 @@ The checked-in inputs contain synthetic observations, credentials and anchor map
 
 For HTTPS evidence, `evaluate` requires the event, definition and commitment registry addresses and an RPC endpoint. Pass the endpoint with `--rpc env:SEPOLIA_RPC_URL`, supplied through a command-scoped environment variable, to keep it out of command arguments and archived parameters. `--from-block` must include all relevant registration, definition and commitment events. Only commitments recorded by the event's registered operator supply the block mapping; a missing matching event returns `UNAVAILABLE`. Commitments after the cutoff are mapped but excluded from that snapshot's eligibility calculation.
 
-The evaluator's automated suite exercises the live evaluation path against a local JSON-RPC stub. Separately, a [live read-only rehearsal](https://github.com/levarac/mizar/issues/5#issuecomment-5846030717) ran on **2026-09-26** at `455a96c` against Sepolia with cutoff block **11785805**. All **17 commitments** were mapped to registry event blocks: sequences **1–12** were used (**96 observations**), and **13–17** were excluded as after the cutoff. `evaluate` exited **0**, offline `verify` returned **PASS**, and a one-bit output mutation returned **FAIL**. There were **0 eligible keys** because no demo phone held a human-check credential at that time. **No root was posted.** These results do not establish a live claim or verification of a posted root. Builds, tests and the rehearsal were not rerun for this documentation update.
+The evaluator's automated suite exercises the live evaluation path against a local JSON-RPC stub. Separately, a [live read-only rehearsal](https://github.com/levarac/mizar/issues/5#issuecomment-5846030717) ran on **2026-09-26** at `455a96c` against Sepolia with cutoff block **11785805**. All **17 commitments** were mapped to registry event blocks: sequences **1–12** were used (**96 observations**), and **13–17** were excluded as after the cutoff. `evaluate` exited **0**, offline `verify` returned **PASS**, and a one-bit output mutation returned **FAIL**. There were **0 eligible keys** because no demo phone held an Alcor credential at that time. **No root was posted.** These results do not establish a live claim or verification of a posted root. Builds, tests and the rehearsal were not rerun for this documentation update.
 
 Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`; `--rpc env:SEPOLIA_RPC_URL` is supported here too. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. The pinned `a798d1b` checkout includes the trusted-parameter guard fix. A local path inside the manifest's directory, or any URL on a remote manifest's origin, is refused as a trust source. Local paths are resolved and classified as the input reader resolves them, including symlink resolution for the archive check. This guard catches location mistakes; it does not establish the provenance of a copy kept elsewhere.
 
@@ -205,7 +213,7 @@ pnpm install --frozen-lockfile
 pnpm e2e
 ```
 
-The runner builds the contracts, installs the evaluator dependencies, evaluates the fixture, starts a local Anvil chain, posts a root, claims, and checks MockEAS output. It checks duplicate-claim and wrong-recipient rejection, the signing golden vector, offline verification, and the local `RootPosted` log. It does not exercise the browser, the attendee app, World ID or Sepolia. Using chain ID 11155111 on Anvil does not make this a Sepolia run.
+The runner builds the contracts, installs the evaluator dependencies, evaluates the fixture, starts a local Anvil chain, posts a root, claims, and checks MockEAS output. It checks duplicate-claim and wrong-recipient rejection, the signing golden vector, offline verification, and the local `RootPosted` log. It does not exercise the browser, Beid, World ID or Sepolia. Using chain ID 11155111 on Anvil does not make this a Sepolia run.
 
 ### Alcor Worker: mocked World verification
 
