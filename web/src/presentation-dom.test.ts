@@ -27,7 +27,9 @@ const sign = () => document.querySelector<HTMLButtonElement>("#sign")!;
 
 beforeEach(() => {
   vi.resetModules();
-  document.body.innerHTML = html.match(/<body>([\s\S]*?)<\/body>/)![1].replace(/<script[\s\S]*?<\/script>/g, "");
+  document.body.innerHTML = html
+    .match(/<body>([\s\S]*?)<\/body>/)![1]
+    .replace(/<script[\s\S]*?<\/script>/g, "");
   localStorage.clear();
   history.replaceState(null, "", "/");
   vi.stubGlobal(
@@ -105,6 +107,32 @@ describe("claim presentation preserves recipient corrections", () => {
     sign().click();
     expect(loadSession().pending?.recipient).toBe(replacement);
     expect(navigate).toHaveBeenCalledOnce();
+  });
+  it("keeps an edited pending recipient when eligibility finishes loading", async () => {
+    saveSession({
+      eventKeyAddress: key,
+      pending: { state: "pending", recipient: originalRecipient },
+    });
+    let finish!: (value: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    );
+    await import("./main");
+    input().value = replacement;
+    input().dispatchEvent(new Event("input", { bubbles: true }));
+    finish({ ok: true, json: async () => eligible });
+    await vi.waitFor(() =>
+      expect(
+        document.querySelector<HTMLElement>("#claim-panel")!.dataset.state,
+      ).toBe("signature"),
+    );
+    expect(input().value).toBe(replacement);
   });
   it("treats a malformed stored pending recipient as absent", async () => {
     localStorage.setItem(

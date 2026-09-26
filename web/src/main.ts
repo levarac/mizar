@@ -76,7 +76,7 @@ function describeEligibility(eligible: EligibleKey): string {
 function render(session: Session, eligible?: EligibleKey | null): void {
   const pendingRecipient = session.pending?.recipient;
   const hasPendingRecipient = typeof pendingRecipient === "string" && isAddress(pendingRecipient) && getAddress(pendingRecipient) !== zeroAddress;
-  if (hasPendingRecipient && !session.claim) {
+  if (hasPendingRecipient && !session.claim && recipientInput.value.trim() === "") {
     recipientInput.value = pendingRecipient;
     recipientGrouped.textContent = groupAddress(pendingRecipient);
   }
