@@ -25,7 +25,7 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**. Links pin the inspected code; the branch column identifies work that may still be awaiting integration. The commands below require the listed component's source checkout, not just this documentation branch.
+Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code; the branch column identifies work that may still be awaiting integration. The commands below require the listed component's source checkout, not just this documentation branch.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
@@ -112,6 +112,8 @@ The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:Regist
 
 Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Use the revisions in the components table in separate source checkouts while their branches are being integrated. Each block starts from its repository root. The E2E checkout includes its own evaluator revision; install and run that checkout together.
 
+For example: `git clone https://github.com/levarac/mizar mizar-evaluator`, then `git -C mizar-evaluator checkout eae54bc` (use `c9c7f1d` for E2E).
+
 ### Contract
 
 ```sh
@@ -169,6 +171,8 @@ pnpm test
 pnpm typecheck
 ```
 
+If a parent directory contains a pnpm workspace, add `--ignore-workspace` to the Alcor Worker install.
+
 The tests use local Miniflare D1 and an injected World verification client. The proof fixtures are documentation-shaped mocks, not captured live World proofs. See [Alcor's Worker README](https://github.com/levarac/alcor/blob/7909844bc76c74f35b5266f6849ff744dd84d453/worker/README.md) for the live configuration still required.
 
 ### Observed local results
@@ -199,7 +203,7 @@ The Alcor integration above was checked at `feat/human-check-service` revision `
 
 ## AI tool disclosure
 
-Development used AI coding agents: Claude Code with Claude Opus, OpenAI Codex, Grok and Devin. The team directed and reviewed the work, with independent AI checkers per branch.
+Development used AI coding agents: Claude Code with Claude Opus, OpenAI Codex, Grok and Devin. The specifications and design decisions that directed the agents are in [docs/design/](docs/design/). Team members set the rule, design and scope, and reviewed each branch with a separate AI agent before integration.
 
 ## License
 
