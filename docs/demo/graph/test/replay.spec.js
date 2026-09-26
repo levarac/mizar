@@ -68,3 +68,28 @@ test('a graph with no observation windows remains a usable static result', async
   await expect(page.getByRole('button', { name: 'Step', exact: true })).toBeDisabled();
   await expect(page.locator('.node')).toHaveCount(7);
 });
+
+test('focus outlines and dashed edges have at least 3:1 rendered contrast', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Step', exact: true }).click();
+  await page.keyboard.press('Tab');
+  await expect(page.locator('#reset')).toBeFocused();
+  const contrast = await page.evaluate(() => {
+    const rgb = color => color.match(/[\d.]+/g).slice(0, 3).map(Number);
+    const luminance = color => color.map(value => {
+      const channel = value / 255;
+      return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, channel, i) => sum + channel * [0.2126, 0.7152, 0.0722][i], 0);
+    const background = rgb(getComputedStyle(document.documentElement).backgroundColor);
+    const ratio = (foreground, opacity = 1) => {
+      const blended = rgb(foreground).map((channel, i) => channel * opacity + background[i] * (1 - opacity));
+      return (luminance(background) + 0.05) / (luminance(blended) + 0.05);
+    };
+    const focus = getComputedStyle(document.activeElement);
+    const edge = getComputedStyle(document.querySelector('.edge.uncounted'));
+    return { focus: ratio(focus.outlineColor), edge: ratio(edge.stroke, Number(edge.opacity)), focusWidth: focus.outlineWidth };
+  });
+  expect(contrast.focusWidth).toBe('3px');
+  expect(contrast.focus).toBeGreaterThanOrEqual(3);
+  expect(contrast.edge).toBeGreaterThanOrEqual(3);
+});

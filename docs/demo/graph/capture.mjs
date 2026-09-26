@@ -2,11 +2,13 @@ import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile, copyFile } from 'node:fs/promises';
 import { spawn, execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { once } from 'node:events';
 const here = dirname(fileURLToPath(import.meta.url));
-const out = resolve(process.argv[2] || '/private/tmp/graph-viz-out');
+const out = resolve(process.argv[2] || join(tmpdir(), 'graph-viz-out'));
 await mkdir(out, { recursive: true });
+console.log(`Capture output: ${out}`);
 const server = spawn(process.execPath, ['serve.mjs'], { cwd: here, stdio: ['ignore', 'pipe', 'pipe'] });
 let browser;
 try {
