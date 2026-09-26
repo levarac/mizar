@@ -132,13 +132,19 @@ function coalescePages(pages: Envelope[]): Envelope[] {
   }
   if (merged.commitments.some(c => c.nextObservationCursor !== null))
     throw new Error("incomplete envelope pagination");
-  for (let i = 1; i < merged.commitments.length; i++) {
-    const before = merged.commitments[i - 1].anchor, after = merged.commitments[i].anchor;
-    if (after.sequence !== before.sequence + 1 ||
-        after.previousCommitmentDigest !== before.commitmentDigest)
-      throw new Error("commitment anchor chain mismatch");
-  }
   return [merged];
+}
+// The inputs must hold the event's commitments from sequence 1 without gaps, so a
+// commitment cannot be dropped from the start or middle of the anchored chain.
+function checkCommitmentChain(env: Envelope) {
+  env.commitments.forEach((item, i) => {
+    const anchor = item.anchor;
+    const valid = i === 0
+      ? anchor.sequence === 1 && anchor.previousCommitmentDigest === "00".repeat(32)
+      : anchor.sequence === env.commitments[i - 1].anchor.sequence + 1 &&
+        anchor.previousCommitmentDigest === env.commitments[i - 1].anchor.commitmentDigest;
+    if (!valid) throw new Error("commitment anchor chain mismatch");
+  });
 }
 function verifyAdmission(env: Envelope, eventId: string) {
   const admission = env.admission;
@@ -192,6 +198,7 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
   for (const env of pages) {
     if (env.version !== 1 || env.context !== eventId.replace(/^0x/, "").toLowerCase())
       throw new Error("envelope event mismatch");
+    checkCommitmentChain(env);
     const admission = verifyAdmission(env, eventId);
     const byDigest = new Map(env.observations.map(o => [o.observationDigest, o]));
     if (byDigest.size !== env.observations.length) throw new Error("duplicate envelope Observation");
@@ -218,9 +225,6 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
         throw new Error("invalid signed commitment");
       const count = uint(c.get(8)), root = bytes(c.get(7), 32);
       if (count < 1) throw new Error("empty commitment is invalid");
-      if (item.anchor.sequence === 1 &&
-          item.anchor.previousCommitmentDigest !== "00".repeat(32))
-        throw new Error("invalid first commitment anchor");
       if (count !== item.inclusions.length) throw new Error("incomplete commitment inclusions");
       const ordered: string[] = new Array(count);
       for (const inc of item.inclusions) {
