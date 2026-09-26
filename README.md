@@ -72,7 +72,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The Mizar claim deployment and live web configuration are pending; the local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia; Alcor and the claim page are still pending deployment. The local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -98,17 +98,29 @@ The contract also vendors upstream EAS and OpenZeppelin dependencies; versions a
 
 ## Sepolia deployment
 
-**Not deployed yet.** No Mizar claim-contract address or registered Mizar schema UID is available for this submission snapshot.
+The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `11155111`**. The contract was built from [main commit 5302c488817804ec49588b0fdbcdb4dbbcaaf51a](https://github.com/levarac/mizar/commit/5302c488817804ec49588b0fdbcdb4dbbcaaf51a).
 
-| Item | Status |
+| Item | Deployment record |
 | --- | --- |
-| Mizar claim contract address | Not deployed yet |
-| Mizar EAS schema UID | Not registered yet |
-| Public root / claim transaction | Pending deployment and an approved live run |
+| Mizar claim contract | [0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC](https://sepolia.etherscan.io/address/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC) |
+| Deployment transaction / block | [0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324](https://sepolia.etherscan.io/tx/0x07fb7bb34a975de97b17ed5f044aff5450273e35b9c41eadbf1686e0f12c4324), block [11784009](https://sepolia.etherscan.io/block/11784009) |
+| Source verification | [Sourcify](https://repo.sourcify.dev/11155111/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC): `exact_match` for creation and runtime bytecode |
+| Mizar EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` |
+| Schema registration transaction | [0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b](https://sepolia.etherscan.io/tx/0xfcf78e48a623790e3d285dca2187acdd6bc99581308978d1c5d6054324c3b30b) |
+| Schema resolver / revocability | No resolver; non-revocable |
+| Event ID | `0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1` |
+| Root poster / event registrar | [0xdf6986bbadd189309d52d437851c10e47ca02e20](https://sepolia.etherscan.io/address/0xdf6986bbadd189309d52d437851c10e47ca02e20) |
+| Event registration transaction | [0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b](https://sepolia.etherscan.io/tx/0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b) |
+| Event window (UTC) | `2026-09-26T05:30:00Z` to `2026-09-27T15:00:00Z` |
+| World ID action | `mizar-ccb8770a` |
+| Alcor credential public key | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` |
+| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployment pending |
+| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
+| Public root / claim transaction | Pending a live run |
 
-The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments.
+The root poster was configured to be the event registrar; the contract does not derive it from the registry. The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
 
-The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. [Deployment instructions](contracts/README.md#deployment-commands-not-run) are separate from the local checks below. Neither script was broadcast for this documentation work.
+The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. The [deployment record and instructions](contracts/README.md#sepolia-deployment) are separate from the local checks below. This documentation update records an existing deployment; neither script was broadcast during the update, and it does not establish a successful live evaluation, claim or join-to-claim flow.
 
 ## Local build and verification
 

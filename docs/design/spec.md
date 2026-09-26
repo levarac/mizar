@@ -15,7 +15,9 @@ The app-side signing entry point is built in the existing app on a separate bran
 
 ## Shared formats
 
-**Event ID.** The 32-byte registry event ID, the same value as an observation's `context`. The demo event is `0x996ab4d7cd0785199b715e6ff004f41ef740ead3b3363602ce1cb14b812d1f94`, valid 2026-09-25 09:00 to 2026-09-27 09:00 JST.
+**Event ID.** The 32-byte registry event ID, the same value as an observation's `context`. The live demo event is `0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1`, with an event window from **2026-09-26T05:30:00Z** to **2026-09-27T15:00:00Z** (UTC).
+
+The [app-signature golden vector](test-vectors/app-signature-v1.json) retains its original event ID, `0x996ab4d7cd0785199b715e6ff004f41ef740ead3b3363602ce1cb14b812d1f94`, and local test-contract address. Other test fixtures retain their existing synthetic event IDs. These fixed test inputs are not the live demo configuration and must not be substituted for it.
 
 **Event key address.** Take the observer's 33-byte compressed secp256k1 key, decompress it, then compute `keccak256(uncompressed[1..65])[12..32]`.
 
@@ -38,6 +40,21 @@ The app-side signing entry point is built in the existing app on a separate bran
 ```
 
 *Demo* values: `minPartners` N = 2; `minWindowsPerPartner` B = 2, with B = 1 kept as a fallback.
+
+The live demo uses these deployment parameters; the `snapshot.id` and `cutoffBlock` values in the interface example above are illustrative placeholders, not a published snapshot.
+
+| Parameter | Live demo value |
+| --- | --- |
+| Chain | Sepolia, `11155111` |
+| Claim contract | `0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC` |
+| EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` |
+| Root poster / event registrar | `0xdf6986bbadd189309d52d437851c10e47ca02e20` |
+| World ID action | `mizar-ccb8770a` |
+| Alcor `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` |
+| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployment pending |
+| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
+
+The [contract deployment record](../../contracts/README.md#sepolia-deployment) includes the source commit, transactions and source verification. The configured poster is the event registrar; this is a constructor setting, not a registry lookup performed by the claim contract.
 
 **Credential list** (published by the human-check service): one entry per credentialed event key. Each entry holds:
 
