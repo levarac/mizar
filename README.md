@@ -25,13 +25,13 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code. The evaluator is now integrated into Mizar `main` at `787e9b6` and included in this branch. The E2E runner is integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
+Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` included in this branch. Links in the components table pin the inspected code. The evaluator was integrated at `787e9b6`, followed by trusted-parameter and anchor-to-block mapping fixes; the claim page includes the verified-callback storage fix. The E2E runner was integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
 | Claim contract | [contracts/](https://github.com/levarac/mizar/tree/b755abcbdcf7bf61a1ee7f8f93b07695fd1317f7/contracts) | `b755abc`, `main` | Snapshot roots, event-key authorization, one-time claims and EAS issuance |
-| Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator) | `787e9b6`, `main`; integrated from `feat/evaluator` at `a7a94a3` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
-| Claim page | [web/](https://github.com/levarac/mizar/tree/68cd65e2424bc55572fdf1be36b02ac391a6cfd9/web) | `68cd65e`, `feat/claim-page`; integrated into `main` at `b755abc` | Recipient entry, typed app callback, eligibility/proof loading and wallet submission |
+| Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/bf91f6658980019d502993f6e33720cd39f11006/evaluator) | `bf91f66`, `main`; initial `feat/evaluator` integration at `787e9b6` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
+| Claim page | [web/](https://github.com/levarac/mizar/tree/bf91f6658980019d502993f6e33720cd39f11006/web) | `bf91f66`, `main`; initial `feat/claim-page` integration at `b755abc` | Recipient entry, verified app callback, eligibility/proof loading and wallet submission |
 | E2E fixture run | [e2e/](https://github.com/levarac/mizar/tree/c9c7f1d5476dbe523ada877a84b81db1d86d26a1/e2e) | `c9c7f1d`, `feat/e2e-fixture-run`; integrated into `main` at `2530658` | Evaluator-to-claim rehearsal on local Anvil with MockEAS |
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
@@ -112,9 +112,9 @@ The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:Regist
 
 ## Local build and verification
 
-Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator, claim-page and E2E commands run from a Mizar checkout containing `main` revision `2530658`, including this branch. Each block starts from its repository root. Alcor uses its own repository.
+Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator, claim-page and E2E commands run from a Mizar checkout containing `main` revision `bf91f66`, including this branch. Each block starts from its repository root. Alcor uses its own repository.
 
-For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout 2530658`. The evaluator and E2E runner no longer need separate feature-branch checkouts.
+For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout bf91f66`. The evaluator and E2E runner no longer need separate feature-branch checkouts.
 
 ### Contract
 
@@ -139,11 +139,17 @@ pnpm mizar verify --manifest /tmp/mizar-readme-out-latest/manifest.json
 
 The checked-in inputs contain synthetic observations, credentials and anchor mappings. Their public deterministic test keys are not event credentials. Offline `PASS` establishes consistency with the poster-supplied archive, including its parameters, credential list and block mapping; it does not prove that those inputs are complete or that a root or input was anchored on Sepolia.
 
-Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. Use `main` revision `e6e7018` or a checkout containing its trusted-parameter guard fix for this mode. A local path inside the manifest's directory, or any URL on a remote manifest's origin, is refused as a trust source. Local paths are resolved and classified as the input reader resolves them, including symlink resolution for the archive check. This guard catches location mistakes; it does not establish the provenance of a copy kept elsewhere.
+### Evaluator: live path, tested with a stub only
+
+For HTTPS evidence, `evaluate` requires the event, definition and commitment registry addresses and an RPC endpoint. Pass the endpoint with `--rpc env:SEPOLIA_RPC_URL`, supplied through a command-scoped environment variable, to keep it out of command arguments and archived parameters. `--from-block` must include all relevant registration, definition and commitment events. Only commitments recorded by the event's registered operator supply the block mapping; a missing matching event returns `UNAVAILABLE`. Commitments after the cutoff are mapped but excluded from that snapshot's eligibility calculation.
+
+The evaluator's automated suite exercises this live evaluation path against a local JSON-RPC stub only. **No live Sepolia evaluation has been run yet.** The [evaluator README](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/evaluator/README.md) records the coverage and the unavailable evidence endpoint. These newer tests were not rerun for this documentation update.
+
+Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`; `--rpc env:SEPOLIA_RPC_URL` is supported here too. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. The pinned `bf91f66` checkout includes the trusted-parameter guard fix. A local path inside the manifest's directory, or any URL on a remote manifest's origin, is refused as a trust source. Local paths are resolved and classified as the input reader resolves them, including symlink resolution for the archive check. This guard catches location mistakes; it does not establish the provenance of a copy kept elsewhere.
 
 Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that credential entries that verify and were verified by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The organizer's parameters publication location and independent digest remain undecided.
 
-Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid archive contents and checked archive mismatches produce `FAIL`. A mismatch between the verifier's parameter copy and its optional expected digest is `UNAVAILABLE`. See the [current evaluator README](https://github.com/levarac/mizar/blob/e6e70189bf5d2dd36164bb5c1a554ad355887d24/evaluator/README.md) for the complete command and trust assumptions. Live chain verification was not run for this document.
+Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid archive contents and checked archive mismatches produce `FAIL`. A mismatch between the verifier's parameter copy and its optional expected digest is `UNAVAILABLE`. See the [current evaluator README](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/evaluator/README.md) for the complete command and trust assumptions. Live chain verification was not run for this document.
 
 ### Claim page
 
@@ -155,6 +161,8 @@ pnpm build
 ```
 
 These are local tests and a static build. `web/src/config.ts` contains example values and must be configured for a real event. A successful build is not a verified app callback or wallet transaction.
+
+During callback handling, the page replaces a stored claim only after fully verifying the callback: a pending request must exist, its state must match, the public key must derive the supplied event-key address, and the signature must verify against that key for the configured event, chain, contract and pending recipient. A rejected or malformed callback leaves the stored claim unchanged. See [`web/src/main.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/main.ts) and [`web/src/codec.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/codec.ts). The historical test results below predate this callback fix.
 
 ### Local E2E: fixture-only, Anvil and MockEAS
 
