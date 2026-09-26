@@ -126,3 +126,50 @@ configuration, `/snapshots/<snapshotId>/eligible.json` returns JSON, a listed
 key's proof returns JSON with the expected root, and a nonexistent proof returns
 404. Enter the recipient and complete the app callback and wallet claim on the
 maintainer's phone. Page loading and JSON delivery alone do not verify a claim.
+
+## Read-only participation rule
+
+`public/claim-config.json` also defines `paramsUrl` (an explicit HTTPS URL) and
+`paramsSha256` (64 hexadecimal characters). The rule card hashes the exact
+response bytes with SHA-256 before parsing or displaying N, B and the human-check
+issuer. Missing configuration, a failed fetch, an invalid document or a digest
+mismatch shows a visible verification error without fallback values. The event
+ID must match the claim page configuration. This card does not change claim
+validation or submission.
+
+Optional `slotSeconds`, `eventStart` and `eventEnd` describe the event definition
+for reference. `slotSeconds` must be a positive integer; the two timestamps must
+be supplied together in UTC (`YYYY-MM-DDTHH:mm:ssZ`), with end after start. Absent
+fields are omitted. The card labels these separately from verified parameters,
+and displays both UTC and the browser's local timezone.
+
+## Fixture preview
+
+```sh
+pnpm --ignore-workspace run build:preview
+pnpm --ignore-workspace run preview
+```
+
+The preview listens on `0.0.0.0:4173` with a fixed port. It builds into
+`/private/tmp/claim-ui-preview-dist`, independently of the strict deployment
+build. It uses the existing evaluator fixtures and a byte-for-byte copy of the
+published parameters. Timing reference data is supplied only for this preview.
+The visible `Preview: fixture data` bar contains the state selector; a state can
+also be selected with `?state=recipient`.
+
+Available states: `unconfigured`, `params-unverified`, `idle`, `lookup`,
+`not-eligible`, `recipient`, `signature`, `ready`, `submitting`, `submitted`,
+`claimed`, `already-claimed`, `error`.
+
+Preview actions only change the displayed state. The transaction link is a
+non-navigating fixture. The preview does not initialize the live claim module,
+connect a wallet, request a signature or submit a transaction. Normal builds
+exclude the preview module and state controls stay hidden.
+
+The live page reports a returned transaction hash as **submitted**, with a
+Sepolia explorer link. It does not infer confirmation from submission; the
+confirmed **claimed** view is available for fixture previews only. The strict
+production build still requires a complete real configuration and snapshot.
+
+Inter is self-hosted as WOFF2 under `public/fonts/`; its SIL Open Font License is
+included alongside the font. No font CDN is used.
