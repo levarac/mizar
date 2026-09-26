@@ -315,7 +315,7 @@ describe("CLI receipt", () => {
       expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 30_000);
-  it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub", async () => {
+  const checkRpc = async (liveOnly: boolean) => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
     const registries = { eventRegistry: "0x00000000000000000000000000000000000000e1",
@@ -404,8 +404,9 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
 `);
     // Async spawn: spawnSync would block the stub server in this process.
     const run = (...args: string[]) => new Promise<{ status: number | null; stdout: string; stderr: string }>(done => {
-      const child = spawn(process.execPath, ["--import", "tsx", "--import", fetchStub, "src/cli.ts", ...args],
-        { cwd: root, env: { ...process.env, MIZAR_TEST_RPC: rpc } });
+      const child = spawn("pnpm", ["mizar", ...args],
+        { cwd: root, env: { ...process.env, MIZAR_TEST_RPC: rpc,
+          NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${JSON.stringify(fetchStub)}` } });
       let stdout = "", stderr = "";
       child.stdout.on("data", chunk => { stdout += chunk; });
       child.stderr.on("data", chunk => { stderr += chunk; });
@@ -446,60 +447,66 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       expect(result.stdout).toContain(reason);
     };
     try {
-      const liveParams = join(out, "live-params.json"), liveOut = join(out, "live");
-      writeFileSync(liveParams, JSON.stringify({ ...published,
-        evidenceSource: `https://evidence.example/v1/events/${page.context}/verification`,
-        anchorBlocksSource: undefined, snapshot: { id: 1, cutoffBlock: cutoff } }));
-      const evaluateLive = (...extra: string[]) => run("evaluate", "--params", liveParams,
-        "--out", liveOut, "--rpc", "env:MIZAR_TEST_RPC", "--from-block", "10", ...extra);
-      requestedFroms.length = 0;
-      const live = await evaluateLive();
-      expect(live.stdout, live.stderr).toContain('"result":"EVALUATED"');
-      expect(live.status).toBe(0);
-      expect(JSON.parse(readFileSync(join(liveOut, "inputs/anchor-blocks.json"), "utf8"))).toEqual(anchors);
-      expect(requestedFroms.length).toBeGreaterThan(3);
-      expect(requestedFroms.every(from => from >= 10)).toBe(true);
-      const liveManifest = JSON.parse(readFileSync(join(liveOut, "manifest.json"), "utf8"));
-      expect(liveManifest.parameters.snapshot.cutoffTimestamp).toBe(params.snapshot.cutoffTimestamp);
-      expect(JSON.stringify(liveManifest)).not.toContain(rpc);
-      expect(liveManifest.parameters.rpcUrl).toBeUndefined();
-      expect(liveManifest.trust.anchorBlockMapping).toContain("ObservationCommitmentRecorded");
-      const legacyParams = join(out, "legacy-rpc-params.json");
-      writeFileSync(legacyParams, JSON.stringify({ ...published, rpcUrl: rpc }));
-      const legacyOut = join(out, "legacy-rpc");
-      expect((await run("evaluate", "--params", legacyParams, "--out", legacyOut)).status).toBe(0);
-      for (const file of ["manifest.json", "inputs/params.json"])
-        expect(readFileSync(join(legacyOut, file), "utf8")).not.toContain(rpc);
-      expect((await run("verify", "--manifest", join(legacyOut, "manifest.json"))).status).toBe(0);
-      expect((await evaluateLive("--from-block", "-1")).status).toBe(2);
-      expect((await evaluateLive("--from-block", "15")).stdout).toContain("event registration unavailable");
-      expect((await evaluateLive("--rpc", "env:MIZAR_MISSING_RPC")).stdout).toContain('"result":"UNAVAILABLE"');
-      for (const foreign of [false, true]) {
-        commitmentPresent = foreign;
-        foreignRecorder = foreign;
-        const missing = await evaluateLive();
-        expect(missing.status).toBe(2);
-        expect(missing.stdout).toContain('"result":"UNAVAILABLE"');
-        expect(missing.stdout).toContain("commitment anchor not backed by registry event");
+      if (liveOnly) {
+        const liveParams = join(out, "live-params.json"), liveOut = join(out, "live");
+        writeFileSync(liveParams, JSON.stringify({ ...published,
+          evidenceSource: `https://evidence.example/v1/events/${page.context}/verification`,
+          anchorBlocksSource: undefined, snapshot: { id: 1, cutoffBlock: cutoff } }));
+        const evaluateLive = (...extra: string[]) => run("evaluate", "--params", liveParams,
+          "--out", liveOut, "--rpc", "env:MIZAR_TEST_RPC", "--from-block", "10", ...extra);
+        requestedFroms.length = 0;
+        const live = await evaluateLive();
+        expect(live.stdout, live.stderr).toContain('"result":"EVALUATED"');
+        expect(live.status).toBe(0);
+        expect(JSON.parse(readFileSync(join(liveOut, "inputs/anchor-blocks.json"), "utf8"))).toEqual(anchors);
+        expect(requestedFroms.length).toBeGreaterThan(3);
+        expect(requestedFroms.every(from => from >= 10)).toBe(true);
+        const liveManifest = JSON.parse(readFileSync(join(liveOut, "manifest.json"), "utf8"));
+        expect(liveManifest.parameters.snapshot.cutoffTimestamp).toBe(params.snapshot.cutoffTimestamp);
+        expect(JSON.stringify(liveManifest)).not.toContain(rpc);
+        expect(liveManifest.parameters.rpcUrl).toBeUndefined();
+        expect(liveManifest.trust.anchorBlockMapping).toContain("ObservationCommitmentRecorded");
+        const legacyParams = join(out, "legacy-rpc-params.json");
+        writeFileSync(legacyParams, JSON.stringify({ ...published, rpcUrl: rpc }));
+        const legacyOut = join(out, "legacy-rpc");
+        expect((await run("evaluate", "--params", legacyParams, "--out", legacyOut)).status).toBe(0);
+        for (const file of ["manifest.json", "inputs/params.json"])
+          expect(readFileSync(join(legacyOut, file), "utf8")).not.toContain(rpc);
+        expect((await run("verify", "--manifest", join(legacyOut, "manifest.json"))).status).toBe(0);
+        expect((await evaluateLive("--from-block", "-1")).status).toBe(2);
+        expect((await evaluateLive("--from-block", "15")).stdout).toContain("event registration unavailable");
+        expect((await evaluateLive("--rpc", "env:MIZAR_MISSING_RPC")).stdout).toContain('"result":"UNAVAILABLE"');
+        for (const foreign of [false, true]) {
+          commitmentPresent = foreign;
+          foreignRecorder = foreign;
+          const missing = await evaluateLive();
+          expect(missing.status).toBe(2);
+          expect(missing.stdout).toContain('"result":"UNAVAILABLE"');
+          expect(missing.stdout).toContain("commitment anchor not backed by registry event");
+        }
+        commitmentPresent = true; foreignRecorder = false;
+        junkCommitment = true;
+        expect((await evaluateLive()).status).toBe(0);
+        junkCommitment = false;
+        anchorBlock = cutoff + 1;
+        const afterCutoff = await evaluateLive();
+        expect(afterCutoff.status).toBe(0);
+        expect(afterCutoff.stdout).toContain('"eligible":0');
+        anchorBlock = anchors[anchor.commitmentDigest];
+        rpcDown = true;
+        const failure = await evaluateLive();
+        expect(failure.stdout).toContain('"result":"UNAVAILABLE"');
+        expect(failure.stdout).not.toContain("secret-test-token");
+        expect(failure.stderr).not.toContain("secret-test-token");
+        rpcDown = false;
+        head = 2_000_000;
+        expect((await evaluateLive()).stdout).toContain("more than 500 eth_getLogs calls");
+        head = 5_000;
+        const honest = await evaluateAs("environment-rpc");
+        expect((await run("verify", "--manifest", honest.manifest, "--rpc", "env:MIZAR_TEST_RPC",
+          "--contract", contract, ...trust({}))).stdout).toContain('"result":"PASS"');
+        return;
       }
-      commitmentPresent = true; foreignRecorder = false;
-      junkCommitment = true;
-      expect((await evaluateLive()).status).toBe(0);
-      junkCommitment = false;
-      anchorBlock = cutoff + 1;
-      const afterCutoff = await evaluateLive();
-      expect(afterCutoff.status).toBe(0);
-      expect(afterCutoff.stdout).toContain('"eligible":0');
-      anchorBlock = anchors[anchor.commitmentDigest];
-      rpcDown = true;
-      const failure = await evaluateLive();
-      expect(failure.stdout).toContain('"result":"UNAVAILABLE"');
-      expect(failure.stdout).not.toContain("secret-test-token");
-      expect(failure.stderr).not.toContain("secret-test-token");
-      rpcDown = false;
-      head = 2_000_000;
-      expect((await evaluateLive()).stdout).toContain("more than 500 eth_getLogs calls");
-      head = 5_000;
 
       // Without verifier-supplied trust anchors an on-chain check never passes.
       const plain = join(out, "plain");
@@ -513,8 +520,7 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       const pass = await verifyOnChain(honest.manifest);
       expect(pass.stdout).toContain('"result":"PASS"');
       expect(pass.status).toBe(0);
-      expect((await run("verify", "--manifest", honest.manifest, "--rpc", "env:MIZAR_TEST_RPC",
-        "--contract", contract, ...trust({}))).stdout).toContain('"result":"PASS"');
+
       await expectUnavailable(honest.manifest, "trusted parameters name another chain ID than --chain-id",
         { "chain-id": "1" });
       const otherChainParams = join(out, "other-chain-params.json");
@@ -596,5 +602,8 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       server.close();
       rmSync(out, { recursive: true, force: true });
     }
-  }, 240_000);
+  };
+  it("maps live anchors using registered operator events and private RPC input", () => checkRpc(true), 240_000);
+  it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub",
+    () => checkRpc(false), 240_000);
 });

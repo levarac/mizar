@@ -76,9 +76,9 @@ Input: the verification-envelope pages for the event, restricted to observations
 Output directory:
 
 - `manifest.json`: the parameters, the digests of all inputs (observation digests, credential list digest, anchor range), the evaluator version and the root. `manifestDigest` is `SHA256` of the exact UTF-8 bytes of `manifest.json` as written by `mizar evaluate`. The manifest does not contain its own digest, and the published file is the one that is hashed.
-- `eligible.json`: `{"addresses": [checksummed, sorted], "explanations": [{"address": …, "partners": [{"address": …, "windows": [enin, …]}]}]}`
+- `eligible.json`: the sorted addresses plus a per-key explanation (partners and windows)
 - `rejected.json`: each non-eligible credentialed key with a reason code (`too_few_partners`, `too_few_windows`, `rpid_conflict`, `not_credentialed`)
-- `proofs/<address>.json`: file name is the lowercase `0x` address; body `{"address": …, "root": …, "proof": [bytes32, …]}`
+- `proofs/<address>.json`: the Merkle proof for each eligible key
 
 CLI:
 
@@ -148,13 +148,13 @@ Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `W
 
   Keep state in `localStorage`, because the callback may open a new tab.
 - **Claim page**, on Mizar's origin:
-  1. Ask for a recipient.
-  2. Open the `p=02` link with `b = chainId ‖ claimContract ‖ recipient`.
-  3. Receive the callback fragment (`sig`, `k`, `a`, `st`). Require that `st` matches, that the address derived from `k` equals `a`, and that ECDSA recovery of the purpose `0x02` digest with `sig` equals `a`.
-  4. Show progress and eligibility for `a` from `eligible.json` and `proofs/<a>.json`.
+  1. Show progress and eligibility for the key address returned by the app.
+  2. Ask for a recipient.
+  3. Open `…&p=02&b=<chainId‖contract‖recipient>`.
+  4. Receive the signature.
   5. Submit `claim` from any wallet.
 
-  The claim page never opens a purpose `0x01` link: that purpose belongs to the human-check binding, and a page-chosen `0x01` message would be signed under the same purpose `/bind` accepts. Never read `recipient` from the page's own URL.
+  Never read `recipient` from the page's own URL.
 
 ## Out of scope
 
