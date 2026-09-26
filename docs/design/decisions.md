@@ -71,13 +71,11 @@ This decision took two rounds.
 
 **Parameters are fixed before the event** (N, B, the evidence cutoff block, and the claim window), so they cannot be tuned after seeing the data.
 
-## D6. The distinct-human gate (proposed, 2026-09-26)
+## D6. The distinct-human gate (decided, 2026-09-26)
 
-**Decision.** Alcor verifies each event key once with World ID. The proof's signal is bound to (eventId, eventKey), and the evaluator accepts only one key per World ID nullifier. The gate is an interface: a desk-issued credential over the event key is an alternative gate with a different trust point.
+**Decision.** Alcor binds one World ID to one event key per event at join time and publishes a signed credential. The proof's signal is bound to (eventId, eventKeyAddress, challenge). At evaluation, Mizar checks the published credential list as of the snapshot cutoff block's timestamp and accepts only the first-verified key per World ID nullifier. The gate is an interface: a desk-issued credential over the event key is an alternative gate with a different trust point.
 
-**Open: when to verify.**
-- **At join**, after the first observation. Partners who never claim still count as verified. This removes a class of false negatives.
-- **At claim**. Simpler to build, but only claimants can serve as verified partners.
+**Why.** Checking at join lets credentialed participants count as partners even if they never claim, avoiding claim-dependent false negatives.
 
 **Known limit.** World ID 4.0 has no on-chain verifier on Ethereum Sepolia, so a third party cannot re-verify the proofs Alcor accepted, and Alcor is a trusted attester in this build. Mitigations: bind the signal to the event key, publish the proof bundles, and sign each verification result. **Open:** the legacy World ID router that exists on Sepolia could verify on-chain but assumes Orb-level credentials. Whether it is usable for the demo is unchecked.
 
@@ -152,7 +150,7 @@ This decision took two rounds.
 - each observation's Merkle inclusion against the commitment's signed Merkle root
 - each observation's own signature
 
-An observation counts for a credentialed event key only when its signature recovers that same key. An observation whose signer is not a credentialed key is `not_credentialed` and cannot contribute to the credentialed graph. Observations carry the signing key but no separately claimed subject key, and the public data carries no delegation certificates, so Mizar cannot tell a delegated signer from an ordinary uncredentialed one. It emits `delegation_unsupported` only when the input explicitly claims a different subject or a delegation path without a verifiable certificate; otherwise delegation status is unknown and not reported. The bundle digest check is out of scope for this build. (Refined the same morning after the implementation sub-PM pointed out that the first wording invented a classification the data cannot support.)
+An observation counts for a credentialed event key only when its signature recovers that same key. An observation whose signer is not a credentialed key is `not_credentialed` and cannot contribute to the credentialed graph. Observations carry the signing key but no separately claimed subject key, and the public data carries no delegation certificates, so Mizar cannot tell a delegated signer from an ordinary uncredentialed one. It emits `delegation_unsupported` only when the input explicitly claims a different subject or a delegation path without a verifiable certificate; otherwise delegation status is unknown and not reported. The bundle digest check is out of scope for this build. (Refined the same morning after the implementation coordinator pointed out that the first wording invented a classification the data cannot support.)
 
 **Why this is enough for Mizar.** Delegation certificates prove which keys may sign on behalf of others in the evidence layer. Mizar does not rely on that: an event key counts only after the distinct-human gate has bound it (D6), and relations are built only from observations those keys signed themselves.
 
