@@ -1,3 +1,4 @@
+import { friendlyError, setPurpose, showState, showTransaction } from "./presentation";
 import {
   createWalletClient,
   custom,
@@ -37,7 +38,8 @@ const recipientGrouped = document.querySelector<HTMLElement>("#recipient-grouped
 const signButton = document.querySelector<HTMLButtonElement>("#sign")!;
 const submitButton = document.querySelector<HTMLButtonElement>("#submit")!;
 const signatureEl = document.querySelector<HTMLElement>("#signature")!;
-document.querySelector<HTMLElement>("#deployment")!.textContent = JSON.stringify(claimPageConfig, null, 2);
+setPurpose(claimPageConfig.eventId);
+let hasStatusError = false;
 
 const chain = defineChain({
   id: claimPageConfig.chainId,
@@ -49,6 +51,15 @@ const chain = defineChain({
 function setStatus(message: string, isError = false): void {
   statusEl.textContent = message;
   statusEl.classList.toggle("error", isError);
+  hasStatusError = isError;
+  if (isError) {
+    showState(/AlreadyClaimed/.test(message) ? "already-claimed" : "error", /AlreadyClaimed/.test(message) ? undefined : friendlyError(message));
+  } else if (message.startsWith("Claim submitted: ")) {
+    showTransaction(message.slice("Claim submitted: ".length));
+    showState("submitted");
+  } else {
+    statusEl.textContent = message;
+  }
 }
 
 function randomHex(bytes: number): Hex {
@@ -58,14 +69,14 @@ function randomHex(bytes: number): Hex {
 }
 
 function describeEligibility(eligible: EligibleKey): string {
-  if (eligible.partners.length === 0) return "Eligible. No partners are listed.";
-  const partners = eligible.partners
-    .map((partner) => `${groupAddress(partner.address)} (windows ${partner.windows.join(", ") || "none"})`)
-    .join("; ");
-  return `Eligible. Partners: ${partners}.`;
+  return `${eligible.partners.length} distinct partners in the published eligible list.`;
 }
 
 function render(session: Session, eligible?: EligibleKey | null): void {
+  if (session.pending && !session.claim) {
+    recipientInput.value = session.pending.recipient;
+    recipientGrouped.textContent = groupAddress(session.pending.recipient);
+  }
   eventKeyEl.textContent = session.eventKeyAddress
     ? groupAddress(session.eventKeyAddress)
     : "Waiting for the app callback.";
@@ -82,6 +93,11 @@ function render(session: Session, eligible?: EligibleKey | null): void {
     ? `Signature stored for ${groupAddress(session.claim.recipient)}.`
     : "No claim signature yet.";
   submitButton.disabled = !session.claim || eligible === null;
+  if (!hasStatusError) {
+    showState(!session.eventKeyAddress ? (session.pending ? "signature" : "idle")
+      : eligible === undefined ? "lookup" : eligible === null ? "not-eligible"
+      : session.claim ? "ready" : session.pending ? "signature" : "recipient");
+  }
 }
 
 function readRecipient(): Address | null {
@@ -131,6 +147,7 @@ signButton.addEventListener("click", () => {
   const state = randomHex(16);
   const session = clearClaimIfDifferent(loadSession(), { recipient });
   saveSession({ ...session, pending: { state, recipient } });
+  showState("signature");
   window.location.assign(
     claimAppLink({
       eventId: claimPageConfig.eventId,
@@ -151,6 +168,7 @@ submitButton.addEventListener("click", async () => {
     setStatus("No injected wallet was found.", true);
     return;
   }
+  showState("submitting");
   try {
     const eligible = await loadEligibility(claim.eventKeyAddress);
     if (!eligible) {
@@ -224,7 +242,8 @@ async function boot(): Promise<void> {
       const eligible = await loadEligibility(session.eventKeyAddress);
       render(session, eligible);
     } catch (error) {
-      eligibilityEl.textContent = error instanceof Error ? error.message : "Could not read eligible.json.";
+      eligibilityEl.textContent = "The published eligibility list could not be read.";
+      if (!hasStatusError) showState("error", "The published eligibility list could not be read; check your connection and reload this page.");
       submitButton.disabled = true;
     }
   }

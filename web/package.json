@@ -7,7 +7,9 @@
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "deploy:dry-run": "wrangler deploy --dry-run",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build:preview": "tsc --noEmit && vite build --config vite.preview.config.ts --mode preview",
+    "preview": "vite preview --config vite.preview.config.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.1",
