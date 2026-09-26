@@ -1,9 +1,10 @@
 import { afterEach, expect, it } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const fixture = resolve(root, "test/fixtures/comparison/params.json");
@@ -92,40 +93,24 @@ it("refuses RPC flags and nonempty output directories", () => {
 }, 30_000);
 
 it("keeps every evaluate file and both CLI receipts byte-identical to main a07469b", () => {
-  const baseline = directory(), out = directory();
-  const ref = "a07469bd3692751a9738d166800fc4d841cf9794";
-  const files = execFileSync("git", ["ls-tree", "-r", "--name-only", ref, "evaluator/src"],
-    { cwd: resolve(root, ".."), encoding: "utf8" }).trim().split("\n");
-  for (const file of files) {
-    const target = join(baseline, file.replace(/^evaluator\//, ""));
-    mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, execFileSync("git", ["show", `${ref}:${file}`], { cwd: root }));
-  }
-  writeFileSync(join(baseline, "package.json"), '{"type":"module"}');
-  symlinkSync(resolve(root, "node_modules"), join(baseline, "node_modules"), "dir");
-  const args = ["evaluate", "--params", resolve(root, "test/fixtures/params.json"), "--out", out];
-  const oldRun = (...a: string[]) => spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...a],
-    { cwd: baseline, encoding: "utf8", timeout: 30_000 });
-  const previous = oldRun(...args);
-  expect(previous.status, previous.stderr).toBe(0);
-  const receipt = JSON.parse(previous.stdout);
-  expect(receipt.root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
-  expect(receipt.manifestDigest).toBe("0x1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a");
-  const readTree = (dir: string): Record<string, Buffer> => Object.fromEntries(
-    readdirSync(dir, { recursive: true, withFileTypes: true }).filter(f => f.isFile()).map(f => {
-      const path = join(f.parentPath, f.name);
-      return [path.slice(dir.length + 1), readFileSync(path)];
+  const out = directory();
+  const baseline = json(resolve(root, "test/fixtures/graph-baseline-a07469b.json"));
+  expect(baseline.baselineCommit).toBe("a07469bd3692751a9738d166800fc4d841cf9794");
+  expect(Object.keys(baseline.files)).toHaveLength(11);
+  const current = run("evaluate", "--params", baseline.input, "--out", out);
+  expect(current.status, current.stderr).toBe(baseline.evaluate.exitCode);
+  // Normalize only the output directory, which varies between test runs.
+  expect(current.stdout.replace(JSON.stringify(out), JSON.stringify("<OUTPUT_DIRECTORY>")))
+    .toBe(baseline.evaluate.stdout);
+  expect(current.stderr).toBe(baseline.evaluate.stderr);
+  const hashes = Object.fromEntries(readdirSync(out, { recursive: true, withFileTypes: true })
+    .filter(file => file.isFile()).map(file => {
+      const path = join(file.parentPath, file.name);
+      return [relative(out, path).split(sep).join("/"), createHash("sha256").update(readFileSync(path)).digest("hex")];
     }));
-  const bytes = readTree(out);
-  const beforeVerify = oldRun("verify", "--manifest", join(out, "manifest.json"));
-  expect(beforeVerify.status).toBe(0);
-  expect(beforeVerify.stdout).toBe('{"result":"PASS"}\n');
-  rmSync(out, { recursive: true });
-  const current = run(...args);
-  expect(current.status, current.stderr).toBe(0);
-  expect(current.stdout).toBe(previous.stdout);
-  expect(readTree(out)).toEqual(bytes);
-  const afterVerify = run("verify", "--manifest", join(out, "manifest.json"));
-  expect(afterVerify.status).toBe(beforeVerify.status);
-  expect(afterVerify.stdout).toBe(beforeVerify.stdout);
+  expect(hashes).toEqual(baseline.files);
+  const verified = run("verify", "--manifest", join(out, "manifest.json"));
+  expect(verified.status, verified.stderr).toBe(baseline.verify.exitCode);
+  expect(verified.stdout).toBe(baseline.verify.stdout);
+  expect(verified.stderr).toBe(baseline.verify.stderr);
 }, 30_000);

@@ -90,10 +90,13 @@ slot replay; there are no interpolated encounters. The directory also contains
 `p5-graph-replay-closing.png`, the three `p5-still-*.png` files, a mobile
 screenshot and capture metadata. Video and screenshots are never committed.
 
-Evaluator regression coverage includes exact comparison of every output file
-and evaluate/verify CLI receipt with main commit
-`a07469bd3692751a9738d166800fc4d841cf9794`. That commit must be available in the
-local Git history when running the test (fetch it in a shallow checkout).
+Evaluator regression coverage compares SHA-256 hashes of all 11 output files
+and exact evaluate/verify CLI receipts with the committed
+[`graph-baseline-a07469b.json`](../../../evaluator/test/fixtures/graph-baseline-a07469b.json)
+fixture. It was produced by running main commit
+`a07469bd3692751a9738d166800fc4d841cf9794`; only the temporary output-directory
+string in the evaluate receipt is normalized. Tests need no Git metadata or
+history and also run from a source archive.
 The default fixture root remains
 `0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9`;
 manifest digest remains
