@@ -52,9 +52,13 @@ directories when adding a later one; do not overwrite a published snapshot.
 Only place intentionally public files in `public/`, since everything there is
 uploaded. Keep private evidence, credentials and environment files out of it.
 
-The build requires a manifest with the configured event and root, parses the
-eligible list, and validates the address, root and Merkle membership of every
-listed key's proof. It does not query Sepolia or establish that the manifest
+The build pins the exact claim contract and requires a manifest with the
+configured event, root and Sepolia chain ID. It checks `outputDigests.eligible`
+against the SHA-256 digest of `JSON.stringify` applied to the parsed eligible
+file, matching the evaluator's format. It also validates the address, root and
+Merkle membership of every listed key's proof. Every published proof JSON,
+including those in retained snapshots, must be listed in its own snapshot's
+eligible file. It does not query Sepolia or establish that the manifest
 digest and root were posted. Independently compare the contract's event,
 `RootPosted` snapshot ID, root and manifest digest before preparing a release.
 Full public recomputation also needs the evaluator's archived inputs; see the
@@ -64,6 +68,10 @@ Missing asset paths return HTTP 404, including missing proofs; they do not fall
 back to HTML. The root callback needs no SPA fallback. Configuration and assets
 are defined using Cloudflare's [static asset configuration](https://developers.cloudflare.com/workers/static-assets/binding/)
 and [custom builds](https://developers.cloudflare.com/workers/wrangler/custom-builds/).
+The [`_headers`](public/_headers) rules add `X-Content-Type-Options: nosniff`
+and `Content-Security-Policy: frame-ancestors 'none'` to static responses.
+Configuration and snapshot responses use `Cache-Control: no-cache` so returning
+browsers revalidate them. See [Cloudflare static asset headers](https://developers.cloudflare.com/workers/static-assets/headers/).
 
 ## Local validation
 
@@ -90,14 +98,19 @@ locally. Check the root page, expand event details, enter a recipient, and check
 ## Maintainer release and smoke checks
 
 Only the maintainer executes the upload after reviewing the completed values
-and local results. From `web/`, with the Levarac token already available in the
-approved shell, keep tracing disabled and scope credentials to the command:
+and local results. From `web/`, load the Levarac token inside the same zsh
+subshell with tracing disabled and scope credentials to the command:
 
-```sh
+```zsh
 (
   set +x
   set +v
-  test -n "${CLOUDFLARE_API_TOKEN_LEVARAC:-}" || exit 1
+  source ~/.config/zsh/secrets.zsh >/dev/null 2>&1 || exit 1
+  if [[ -z "${CLOUDFLARE_API_TOKEN_LEVARAC:-}" ]]; then
+    printf '%s\n' UNSET
+    exit 1
+  fi
+  printf '%s\n' SET
   CLOUDFLARE_API_TOKEN="$CLOUDFLARE_API_TOKEN_LEVARAC" \
     CLOUDFLARE_ACCOUNT_ID=3b81daf46f27d8d61d46559407b8a607 \
     WRANGLER_SEND_METRICS=false pnpm exec wrangler deploy

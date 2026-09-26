@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { parseDeploymentConfig, validateSnapshot } from "./src/deployment";
 
@@ -12,7 +12,11 @@ export default defineConfig({
       const readJson = (path: string) => JSON.parse(readFileSync(
         fileURLToPath(new URL(path.replace(/^\//, ""), publicDirectory)), "utf8",
       ));
-      validateSnapshot(parseDeploymentConfig(readJson("claim-config.json")), readJson);
+      const config = parseDeploymentConfig(readJson("claim-config.json"));
+      const proofPaths = readdirSync(publicDirectory, { recursive: true, encoding: "utf8" })
+        .filter((path) => path.includes("/proofs/") && path.endsWith(".json"))
+        .map((path) => `/${path}`);
+      validateSnapshot(config, readJson, proofPaths);
     },
   }],
   test: {
