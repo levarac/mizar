@@ -11,6 +11,7 @@ import {
 } from "./rule-card";
 import {
   setPurpose,
+  setStateHeading,
   showState,
   showTransaction,
   type ClaimView,
@@ -37,19 +38,14 @@ export function startPreview(): void {
   bar.innerHTML =
     '<strong>Preview: fixture data</strong><label for="preview-state">View state</label><select id="preview-state"></select>';
   document.body.prepend(bar);
-  const config = parseRuleConfig({
-    ...deployment,
-    slotSeconds: 300,
-    eventStart: "2026-09-26T05:30:00Z",
-    eventEnd: "2026-09-27T15:00:00Z",
-  });
+  const config = parseRuleConfig(deployment);
   const params = verifyParameters(
     new TextEncoder().encode(paramsBytes),
     config,
   );
   const select = document.querySelector<HTMLSelectElement>("#preview-state")!;
   for (const [value, label] of states) select.add(new Option(label, value));
-  const recipient = getAddress(eligible.addresses[1]);
+  let recipient = getAddress(eligible.addresses[1]);
   const key = getAddress(eligible.addresses[0]);
   const input = document.querySelector<HTMLInputElement>("#recipient")!;
   const grouped = document.querySelector<HTMLElement>("#recipient-grouped")!;
@@ -63,8 +59,10 @@ export function startPreview(): void {
       showRuleError();
     showState(selected === "params-unverified" ? "unconfigured" : selected);
     if (selected === "params-unverified") {
-      document.querySelector("#state-title")!.textContent =
-        "Check the published parameters.";
+      setStateHeading(
+        "Check the published parameters.",
+        "published parameters.",
+      );
       document.querySelector("#state-status")!.textContent =
         "The parameters could not be verified; ask the event organizer for the correct file and try again.";
     }
@@ -102,7 +100,8 @@ export function startPreview(): void {
   select.addEventListener("change", () => change(select.value));
   input.addEventListener("input", () => {
     try {
-      grouped.textContent = groupAddress(getAddress(input.value.trim()));
+      recipient = getAddress(input.value.trim());
+      grouped.textContent = groupAddress(recipient);
     } catch {
       grouped.textContent = "Enter a complete wallet address.";
     }

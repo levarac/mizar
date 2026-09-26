@@ -4,12 +4,12 @@ import { resolve } from "node:path";
 
 export default defineConfig({
   publicDir: false,
-  build: { outDir: "/private/tmp/claim-ui-preview-dist", emptyOutDir: true },
+  build: { outDir: "dist/preview", emptyOutDir: true },
   plugins: [
     {
       name: "preview-fonts",
       closeBundle() {
-        const target = "/private/tmp/claim-ui-preview-dist/fonts";
+        const target = "dist/preview/fonts";
         mkdirSync(target, { recursive: true });
         cpSync(resolve("public/fonts"), target, { recursive: true });
       },

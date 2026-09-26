@@ -85,12 +85,50 @@ const content: Record<ClaimView, [string, string, string, number]> = {
     2,
   ],
 };
+const emphasis: Record<ClaimView, string> = {
+  idle: "recipient wallet.",
+  unconfigured: "not ready yet.",
+  lookup: "participation.",
+  "not-eligible": "No record",
+  recipient: "your record",
+  signature: "the app.",
+  ready: "ready to claim.",
+  submitting: "your wallet.",
+  submitted: "on its way.",
+  claimed: "yours.",
+  "already-claimed": "has been claimed.",
+  error: "this step.",
+};
+export function setStateHeading(title: string, phrase: string): void {
+  const heading = document.querySelector("#state-title")!;
+  const start = title.indexOf(phrase);
+  if (start < 0) {
+    heading.textContent = title;
+    return;
+  }
+  const highlight = document.createElement("span");
+  highlight.className = "highlight";
+  highlight.textContent = phrase;
+  heading.replaceChildren(
+    title.slice(0, start),
+    highlight,
+    title.slice(start + phrase.length),
+  );
+}
 export function showState(state: ClaimView, message?: string): void {
   if (!document.querySelector("#claim-panel")) return;
   const [label, title, description, step] = content[state];
   document.querySelector<HTMLElement>("#claim-panel")!.dataset.state = state;
   document.querySelector("#state-label")!.textContent = label;
-  document.querySelector("#state-title")!.textContent = title;
+  setStateHeading(title, emphasis[state]);
+  const result = document.querySelector<HTMLElement>("#state-result")!;
+  const pass = ["recipient", "ready", "claimed", "already-claimed"].includes(
+    state,
+  );
+  const fail = ["not-eligible", "error"].includes(state);
+  result.hidden = !pass && !fail;
+  result.textContent = pass ? "PASS" : "FAIL";
+  result.classList.toggle("fail", fail);
   document.querySelector("#state-status")!.textContent = message ?? description;
   document
     .querySelectorAll<HTMLElement>("[data-step]")

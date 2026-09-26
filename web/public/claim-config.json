@@ -8,5 +8,8 @@
   "expectedRoot": "REPLACE_POSTED_ROOT",
   "snapshotId": "REPLACE_POSTED_SNAPSHOT_ID",
   "paramsUrl": "https://raw.githubusercontent.com/levarac/mizar/f8823ac23b3f936e1c7820dab65db49fbf600ee7/docs/demo/params-0xccb8770a.json",
-  "paramsSha256": "1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08"
+  "paramsSha256": "1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08",
+  "slotSeconds": 300,
+  "eventStart": "2026-09-26T05:30:00Z",
+  "eventEnd": "2026-09-27T15:00:00Z"
 }

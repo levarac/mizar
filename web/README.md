@@ -151,9 +151,9 @@ pnpm --ignore-workspace run preview
 ```
 
 The preview listens on `0.0.0.0:4173` with a fixed port. It builds into
-`/private/tmp/claim-ui-preview-dist`, independently of the strict deployment
+`web/dist/preview`, independently of the strict deployment
 build. It uses the existing evaluator fixtures and a byte-for-byte copy of the
-published parameters. Timing reference data is supplied only for this preview.
+published parameters. Timing reference data comes from the event configuration.
 The visible `Preview: fixture data` bar contains the state selector; a state can
 also be selected with `?state=recipient`.
 

@@ -75,7 +75,7 @@ summary:focus-visible {
   background: var(--blue);
 }
 .network {
-  font-size: 13px;
+  font-size: 14px;
   letter-spacing: 0.12em;
   color: var(--muted);
 }
@@ -88,7 +88,7 @@ main {
   margin-bottom: 30px;
 }
 .eyebrow {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 650;
   letter-spacing: 0.13em;
   line-height: 1.5;
@@ -149,7 +149,7 @@ p {
 }
 .steps span {
   color: var(--blue);
-  font-size: 12px;
+  font-size: 14px;
   display: inline-block;
   margin-right: 9px;
   font-weight: 600;
@@ -203,7 +203,7 @@ input {
   color: var(--blue);
 }
 .helper {
-  font-size: 13px;
+  font-size: 16px;
   color: var(--muted);
   line-height: 1.5;
   margin: 0 0 12px;
@@ -224,7 +224,7 @@ input {
   margin: 12px 0;
 }
 .purpose {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.6;
   color: var(--muted);
   margin: 14px 0 18px;
@@ -232,6 +232,9 @@ input {
 }
 .actions {
   min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 button,
 .primary-link {
@@ -270,19 +273,19 @@ button:disabled {
 }
 .evidence-summary .eyebrow {
   margin-bottom: 5px;
-  font-size: 10px;
+  font-size: 14px;
 }
 .evidence-summary p {
-  font-size: 14px;
+  font-size: 16px;
   margin-bottom: 5px;
 }
 .evidence-summary > #signature {
   grid-column: 1/-1;
-  font-size: 12px;
+  font-size: 16px;
   margin-top: 7px;
 }
 .evidence-summary .address {
-  font-size: 13px;
+  font-size: 14px;
 }
 .rule-card {
   border-top: 3px solid var(--blue);
@@ -302,7 +305,7 @@ button:disabled {
   margin-bottom: 12px;
 }
 .verification {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--blue);
   padding-bottom: 13px;
   margin-bottom: 18px;
@@ -332,7 +335,7 @@ button:disabled {
 }
 .rule-numbers .eyebrow {
   grid-column: 1/-1;
-  font-size: 11px;
+  font-size: 14px;
   margin-bottom: 0;
   color: var(--muted);
 }
@@ -350,7 +353,7 @@ button:disabled {
   line-height: 1.4;
 }
 .rule-description {
-  font-size: 14px;
+  font-size: 16px;
   color: var(--muted);
   margin: 0 0 17px;
 }
@@ -359,11 +362,11 @@ button:disabled {
   padding-top: 14px;
 }
 .event-reference .eyebrow {
-  font-size: 10px;
+  font-size: 14px;
   margin-bottom: 4px;
 }
 .event-reference .helper {
-  font-size: 11px;
+  font-size: 16px;
   margin-bottom: 8px;
 }
 dl {
@@ -385,7 +388,7 @@ dd {
 }
 dd small {
   display: block;
-  font-size: 11px;
+  font-size: 16px;
   color: var(--muted);
   margin-top: 5px;
 }
@@ -398,14 +401,14 @@ dd small {
   padding-top: 14px;
 }
 .issuer .eyebrow {
-  font-size: 10px;
+  font-size: 14px;
   margin-bottom: 5px;
 }
 .issuer > a {
   font-size: 15px;
 }
 .issuer details {
-  font-size: 12px;
+  font-size: 14px;
   margin-top: 7px;
   overflow-wrap: anywhere;
 }
@@ -419,7 +422,7 @@ dd small {
   margin-left: 8px;
 }
 #rule-key {
-  font-size: 12px;
+  font-size: 14px;
   margin: 8px 0;
 }
 .params-source {
@@ -431,14 +434,14 @@ dd small {
   font-size: 15px;
 }
 .params-source .eyebrow {
-  font-size: 9px;
+  font-size: 14px;
   color: var(--muted);
   margin: 9px 0 4px;
 }
 .digest {
   font-family: ui-monospace, monospace;
   color: var(--blue);
-  font-size: 11px;
+  font-size: 14px;
   overflow-wrap: anywhere;
   margin: 0;
   max-width: 100%;
@@ -450,11 +453,11 @@ footer {
   border-top: 1px solid var(--line);
   margin-top: 26px;
   padding-top: 16px;
-  font-size: 12px;
+  font-size: 16px;
   color: var(--muted);
 }
 footer a {
-  font-size: 12px;
+  font-size: 16px;
 }
 #preview-bar {
   display: flex;
@@ -463,17 +466,17 @@ footer a {
   padding: 8px 56px;
   background: #111;
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
 }
 #preview-bar strong {
   letter-spacing: 0.03em;
   margin-right: auto;
 }
 #preview-bar label {
-  font-size: 11px;
+  font-size: 14px;
 }
 #preview-state {
-  font-size: 12px;
+  font-size: 14px;
   max-width: 270px;
   border: 1px solid #777;
   background: #111;
@@ -510,7 +513,7 @@ footer a {
     font-size: 17px;
   }
   .digest {
-    font-size: 12px;
+    font-size: 14px;
   }
 }
 @media (max-width: 900px) {
@@ -555,7 +558,7 @@ footer a {
     align-items: flex-start;
   }
   .wordmark {
-    font-size: 10px;
+    font-size: 14px;
     letter-spacing: 0.1em;
     gap: 8px;
   }
@@ -564,7 +567,7 @@ footer a {
     height: 9px;
   }
   .network {
-    font-size: 9px;
+    font-size: 14px;
     white-space: nowrap;
   }
   main {
@@ -576,7 +579,7 @@ footer a {
     letter-spacing: -0.055em;
   }
   .intro > .eyebrow {
-    font-size: 9px;
+    font-size: 14px;
   }
   .lede {
     font-size: 16px;
@@ -589,12 +592,12 @@ footer a {
     min-height: 680px;
   }
   .steps li {
-    font-size: 10px;
+    font-size: 14px;
     padding: 13px 10px;
   }
   .steps span {
     display: block;
-    font-size: 10px;
+    font-size: 14px;
     margin-bottom: 3px;
   }
   .state-body {
@@ -605,7 +608,7 @@ footer a {
     font-size: 31px;
   }
   .state-body > .eyebrow {
-    font-size: 10px;
+    font-size: 14px;
   }
   #state-status {
     font-size: 17px;
@@ -619,14 +622,14 @@ footer a {
     padding: 12px 10px;
   }
   .helper {
-    font-size: 11px;
+    font-size: 16px;
   }
   #recipient-grouped {
     font-size: 14px;
     line-height: 1.8;
   }
   .purpose {
-    font-size: 12px;
+    font-size: 16px;
   }
   .actions {
     min-height: 52px;
@@ -643,7 +646,7 @@ footer a {
     gap: 10px;
   }
   .evidence-summary .address {
-    font-size: 12px;
+    font-size: 14px;
   }
   .evidence-summary > #signature {
     margin: 0;
@@ -652,7 +655,7 @@ footer a {
     display: block;
   }
   .rule-heading .eyebrow {
-    font-size: 10px;
+    font-size: 14px;
     margin-bottom: 8px;
   }
   .rule-heading h2 {
@@ -668,28 +671,28 @@ footer a {
     font-size: 62px;
   }
   .rule-numbers p {
-    font-size: 12px;
+    font-size: 14px;
   }
   .rule-numbers .eyebrow {
-    font-size: 9px;
+    font-size: 14px;
   }
   .rule-description {
-    font-size: 13px;
+    font-size: 16px;
   }
   dl > div {
-    font-size: 12px;
+    font-size: 14px;
     grid-template-columns: 90px 1fr;
   }
   .digest {
-    font-size: 10px;
+    font-size: 14px;
   }
   footer {
     display: block;
-    font-size: 11px;
+    font-size: 16px;
   }
   footer a {
     display: block;
-    font-size: 11px;
+    font-size: 16px;
     margin-top: 12px;
   }
   #preview-bar {
@@ -699,15 +702,15 @@ footer a {
   }
   #preview-bar strong {
     flex-basis: 100%;
-    font-size: 11px;
+    font-size: 14px;
   }
   #preview-state {
     flex: 1;
     min-width: 0;
-    font-size: 11px;
+    font-size: 14px;
   }
   #preview-bar label {
-    font-size: 10px;
+    font-size: 14px;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -774,7 +777,7 @@ footer a {
   }
 }
 
-.actions { display: flex; flex-direction: column; gap: 10px; }
+/* Re-signing stays available beside the primary submission action. */
 button.secondary {
   order: 2;
   border: 0;
@@ -787,4 +790,225 @@ button.secondary {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
-button.secondary:hover { color: #003DD0; }
+button.secondary:hover {
+  color: #003dd0;
+}
+@media (min-width: 901px) {
+  .masthead {
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+  main {
+    padding-top: 20px;
+  }
+  h1 {
+    font-size: 54px;
+    margin-bottom: 12px;
+  }
+  .intro > .eyebrow {
+    margin-bottom: 8px;
+  }
+  .intro {
+    margin-bottom: 20px;
+  }
+  .claim-panel {
+    height: 720px;
+    min-height: 720px;
+  }
+  .evidence-summary {
+    height: 160px;
+    min-height: 160px;
+  }
+  .rule-card {
+    padding-top: 18px;
+  }
+  .rule-numbers {
+    margin-bottom: 10px;
+  }
+  .event-reference,
+  .issuer {
+    padding-top: 10px;
+  }
+  .params-source {
+    margin-top: 12px;
+    padding-top: 10px;
+  }
+}
+@media (max-width: 480px) {
+  .masthead {
+    flex-wrap: wrap;
+  }
+  .claim-panel {
+    height: 1000px;
+    min-height: 1000px;
+  }
+  .evidence-summary {
+    height: 260px;
+    min-height: 260px;
+  }
+  .rule-card {
+    min-height: 1020px;
+  }
+  .rule-numbers p {
+    font-size: 16px;
+  }
+}
+
+/* Visual language shared with the event figures. */
+:root {
+  --mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,
+h2 {
+  font-weight: 750;
+}
+.highlight {
+  color: #fff;
+  background: #014efe;
+  padding: 0 0.09em 0.035em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.eyebrow,
+.wordmark,
+.network,
+.steps span,
+.verification,
+.result-chip {
+  font-family: var(--mono);
+}
+.eyebrow::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  background: #014efe;
+  vertical-align: 0.12em;
+}
+.state-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.result-chip,
+.verification::before {
+  background: #014efe;
+  color: #fff;
+  padding: 3px 7px;
+  font-size: 16px;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+.result-chip.fail,
+.verification.error::before {
+  background: #b93816;
+}
+.verification::before {
+  content: "PASS";
+  width: auto;
+  height: auto;
+  margin-right: 10px;
+}
+.verification.error::before {
+  content: "FAIL";
+}
+.rule-card {
+  --blue: #80aaff;
+  --muted: #cbd3e3;
+  --line: #36415a;
+  background: #0c1224;
+  color: #fefffb;
+  padding: 22px 24px;
+  border: 1px solid var(--line);
+  border-top: 3px solid #014efe;
+}
+.rule-card .eyebrow::before {
+  background: #80aaff;
+}
+.rule-card .verification.error {
+  color: #ffac95;
+}
+.rule-heading {
+  display: block;
+}
+.rule-heading .eyebrow {
+  margin-bottom: 9px;
+}
+.rule-heading h2 {
+  font-size: 32px;
+  margin-bottom: 14px;
+}
+.rule-card details summary {
+  font-size: 16px;
+}
+.rule-card dl > div {
+  font-size: 16px;
+}
+@media (min-width: 901px) {
+  .rule-card {
+    padding: 18px 22px;
+  }
+  .rule-heading {
+    display: flex;
+    align-items: baseline;
+  }
+  .rule-heading .eyebrow {
+    font-size: 14px;
+    letter-spacing: 0.06em;
+  }
+  .rule-heading h2 {
+    font-size: 28px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 480px) {
+  .rule-card {
+    padding: 22px 18px;
+  }
+  .state-heading {
+    flex-wrap: wrap;
+    gap: 0 10px;
+  }
+  .result-chip {
+    margin-bottom: 12px;
+  }
+  .rule-numbers > div {
+    display: block;
+  }
+  .rule-numbers .eyebrow {
+    display: block;
+    min-height: 42px;
+  }
+  .rule-numbers strong {
+    display: block;
+    margin: 6px 0;
+  }
+  .rule-numbers p {
+    font-size: 16px;
+  }
+  .rule-card dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+@media (min-width: 901px) {
+  .state-body #state-status {
+    min-height: 44px;
+  }
+  .state-body h2 {
+    margin-bottom: 14px;
+  }
+  .purpose {
+    margin-top: 12px;
+    margin-bottom: 14px;
+  }
+}
+@media (max-width: 480px) {
+  .claim-panel {
+    height: 1080px;
+    min-height: 1080px;
+  }
+}
