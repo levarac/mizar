@@ -1,0 +1,1378 @@
+From 8aa622554b85437f3fbf82e0c62415ffe65be2e6 Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 03:11:21 +0900
+Subject: [PATCH 1/6] Add shared codec for event-key signing links
+
+Parses beid://event-key-sign links for two typed purposes (personhood
+binding and claim), builds the exact message the event key signs, and
+formats the callback fragment. Messages start with 0xFF, which no other
+event-key-signed format can start with. Tests pin the golden vector
+shared with mizar's contract and evaluator.
+---
+ .../eventkeysign/EventKeySignRequest.kt       | 208 ++++++++++++++++
+ .../eventkeysign/EventKeySignRequestTest.kt   | 229 ++++++++++++++++++
+ 2 files changed, 437 insertions(+)
+ create mode 100644 shared/src/commonMain/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequest.kt
+ create mode 100644 shared/src/commonTest/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequestTest.kt
+
+diff --git a/shared/src/commonMain/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequest.kt b/shared/src/commonMain/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequest.kt
+new file mode 100644
+index 00000000..8a2b773e
+--- /dev/null
++++ b/shared/src/commonMain/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequest.kt
+@@ -0,0 +1,208 @@
++package org.levarac.beid.shared.eventkeysign
++
++/**
++ * The one entry point through which a web page may obtain a signature by a
++ * participant's per-event Barnard signing key (the ObservationV1 `observer`).
++ *
++ * A page opens `beid://event-key-sign?v=1&p=<purpose>&e=<eventId>&b=<body>&st=<state>[&k=<eventKey>]`.
++ * This file decides whether that link is acceptable and which exact bytes the
++ * native side signs; native code resolves the event, asks the participant,
++ * calls Barnard, and opens the compiled-in callback. Both apps must agree on
++ * the bytes, which is why the layout lives here.
++ *
++ * Signed message (mizar `docs/design/spec.md`, "App signature"):
++ *
++ * ```
++ * M = 0xFF ‖ "beid/event-key-sign/v1" ‖ 0x00 ‖ purpose ‖ eventId(32) ‖ body
++ *   purpose 0x01: body = challenge(32)                                   |M| = 89
++ *   purpose 0x02: body = chainId(uint256) ‖ claimContract(20) ‖ recipient(20)  |M| = 129
++ * ```
++ *
++ * Barnard signs `SHA256(M)`, which Solidity rebuilds as
++ * `sha256(abi.encodePacked(bytes1(0xff), "beid/event-key-sign/v1", bytes1(0x00), uint8(purpose), eventId, ...body))`.
++ *
++ * **A leading 0xFF is reserved for this entry point.** Every other message the
++ * event key signs starts with something else: the COSE `Sig_structure` of an
++ * ObservationV1 starts 0x84, the legacy WindowReport starts with the UTF-8
++ * event code, and Barnard's own proofs start with an ASCII `barnard-` tag.
++ * 0xFF can begin neither CBOR nor UTF-8, so no signature obtained here can be
++ * presented as any of those. A future event-key message format must not start
++ * with 0xFF.
++ *
++ * There is deliberately no callback parameter: the result goes only to the
++ * https URL the app was built with for that purpose, so a link cannot name
++ * where a signature is sent.
++ */
++public enum class EventKeySignPurpose(public val code: Int) {
++    PERSONHOOD_BINDING(1),
++    CLAIM(2),
++}
++
++public enum class EventKeySignRejection {
++    NOT_EVENT_KEY_SIGN_LINK,
++    MALFORMED_QUERY,
++    DUPLICATE_PARAMETER,
++    UNKNOWN_PARAMETER,
++    UNSUPPORTED_VERSION,
++    UNKNOWN_PURPOSE,
++    INVALID_EVENT_ID,
++    INVALID_BODY,
++    INVALID_STATE,
++    INVALID_EVENT_KEY,
++}
++
++public sealed interface EventKeySignParseResult {
++    public class Accepted(public val request: EventKeySignRequest) : EventKeySignParseResult
++
++    public class Rejected(public val reason: EventKeySignRejection) : EventKeySignParseResult
++}
++
++/**
++ * A validated request. Hex fields are lowercase; `eventIdHex` and
++ * `expectedEventKeyHex` carry no `0x` prefix, the two addresses do.
++ */
++public class EventKeySignRequest internal constructor(
++    public val purpose: EventKeySignPurpose,
++    public val eventIdHex: String,
++    public val state: String,
++    public val expectedEventKeyHex: String?,
++    private val bodyHex: String,
++) {
++    /** Purpose 0x01 only. */
++    public val challengeHex: String? =
++        if (purpose == EventKeySignPurpose.PERSONHOOD_BINDING) bodyHex else null
++
++    /** Purpose 0x02 only, as a decimal string for display. */
++    public val chainIdDecimal: String? =
++        if (purpose == EventKeySignPurpose.CLAIM) bodyHex.substring(0, 64).toLong(16).toString() else null
++
++    /** Purpose 0x02 only. */
++    public val claimContractHex: String? =
++        if (purpose == EventKeySignPurpose.CLAIM) "0x" + bodyHex.substring(64, 104) else null
++
++    /** Purpose 0x02 only. */
++    public val recipientHex: String? =
++        if (purpose == EventKeySignPurpose.CLAIM) "0x" + bodyHex.substring(104, 144) else null
++
++    /** The exact bytes of M, as lowercase hex, for the native signer. */
++    public fun messageHex(): String =
++        MESSAGE_PREFIX_HEX + purpose.code.toString(16).padStart(2, '0') + eventIdHex + bodyHex
++}
++
++public fun parseEventKeySignLink(link: String): EventKeySignParseResult {
++    if (!link.startsWith(LINK_PREFIX)) return rejected(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK)
++    val rest = link.substring(LINK_PREFIX.length)
++    if (rest.isNotEmpty() && rest[0] != '?') return rejected(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK)
++    val query = rest.removePrefix("?")
++    if (query.isEmpty() || query.any { !it.isQueryCharacter() }) {
++        return rejected(EventKeySignRejection.MALFORMED_QUERY)
++    }
++
++    val parameters = mutableMapOf<String, String>()
++    for (pair in query.split('&')) {
++        val separator = pair.indexOf('=')
++        if (separator <= 0 || separator == pair.length - 1) return rejected(EventKeySignRejection.MALFORMED_QUERY)
++        val name = pair.substring(0, separator)
++        val value = pair.substring(separator + 1)
++        if ('=' in value) return rejected(EventKeySignRejection.MALFORMED_QUERY)
++        if (name !in KNOWN_PARAMETERS) return rejected(EventKeySignRejection.UNKNOWN_PARAMETER)
++        if (parameters.put(name, value) != null) return rejected(EventKeySignRejection.DUPLICATE_PARAMETER)
++    }
++
++    if (parameters["v"] != "1") return rejected(EventKeySignRejection.UNSUPPORTED_VERSION)
++    val purpose = when (parameters["p"]) {
++        "01" -> EventKeySignPurpose.PERSONHOOD_BINDING
++        "02" -> EventKeySignPurpose.CLAIM
++        else -> return rejected(EventKeySignRejection.UNKNOWN_PURPOSE)
++    }
++    val eventIdHex = canonicalHex(parameters["e"], EVENT_ID_BYTES)
++        ?: return rejected(EventKeySignRejection.INVALID_EVENT_ID)
++    val bodyHex = canonicalHex(parameters["b"], purpose.bodyBytes())
++        ?.takeIf { purpose.acceptsBody(it) }
++        ?: return rejected(EventKeySignRejection.INVALID_BODY)
++    val state = parameters["st"]?.takeIf { it.isValidState() }
++        ?: return rejected(EventKeySignRejection.INVALID_STATE)
++    val expectedEventKeyHex = parameters["k"]?.let { raw ->
++        canonicalHex(raw, COMPRESSED_KEY_BYTES)?.takeIf { it.startsWith("02") || it.startsWith("03") }
++            ?: return rejected(EventKeySignRejection.INVALID_EVENT_KEY)
++    }
++
++    return EventKeySignParseResult.Accepted(
++        EventKeySignRequest(purpose, eventIdHex, state, expectedEventKeyHex, bodyHex),
++    )
++}
++
++/**
++ * The URL fragment the native side appends to the purpose's callback after a
++ * successful signature. `sig` is `r ‖ s ‖ v` with `v = recoveryId + 27`, the
++ * 65-byte form OpenZeppelin `ECDSA.recover(bytes32, bytes)` accepts. Returns
++ * null when any input is outside that profile, so a malformed result is never
++ * handed to a page.
++ */
++public fun eventKeySignSuccessFragment(
++    state: String,
++    rHex: String,
++    sHex: String,
++    recoveryId: Int,
++    eventKeyHex: String,
++    eventKeyAddressHex: String,
++): String? {
++    if (!state.isValidState()) return null
++    if (recoveryId != 0 && recoveryId != 1) return null
++    val r = canonicalHex(rHex, 32) ?: return null
++    val s = canonicalHex(sHex, 32) ?: return null
++    val key = canonicalHex(eventKeyHex, COMPRESSED_KEY_BYTES) ?: return null
++    val address = canonicalHex(eventKeyAddressHex, 20) ?: return null
++    val v = (recoveryId + 27).toString(16).padStart(2, '0')
++    return "v=1&st=$state&sig=0x$r$s$v&k=0x$key&a=0x$address"
++}
++
++/** The URL fragment for a request the participant declined. */
++public fun eventKeySignCancelledFragment(state: String): String? =
++    if (state.isValidState()) "v=1&st=$state&err=cancelled" else null
++
++private const val LINK_PREFIX = "beid://event-key-sign"
++private const val MESSAGE_PREFIX_HEX = "ff626569642f6576656e742d6b65792d7369676e2f763100"
++private const val EVENT_ID_BYTES = 32
++private const val COMPRESSED_KEY_BYTES = 33
++private const val MAX_STATE_LENGTH = 64
++private val KNOWN_PARAMETERS = setOf("v", "p", "e", "b", "st", "k")
++
++private fun rejected(reason: EventKeySignRejection) = EventKeySignParseResult.Rejected(reason)
++
++private fun EventKeySignPurpose.bodyBytes(): Int = when (this) {
++    EventKeySignPurpose.PERSONHOOD_BINDING -> 32
++    EventKeySignPurpose.CLAIM -> 72
++}
++
++private fun EventKeySignPurpose.acceptsBody(bodyHex: String): Boolean = when (this) {
++    EventKeySignPurpose.PERSONHOOD_BINDING -> true
++    EventKeySignPurpose.CLAIM -> {
++        val chainId = bodyHex.substring(0, 64)
++        // A chain id must be non-zero and fit a signed 64-bit value so it can
++        // be shown to the participant exactly; no real chain id is larger.
++        chainId.substring(0, 48).all { it == '0' } &&
++            chainId[48] in '0'..'7' &&
++            chainId.any { it != '0' } &&
++            bodyHex.substring(64, 104).any { it != '0' } &&
++            bodyHex.substring(104, 144).any { it != '0' }
++    }
++}
++
++/** Lowercase hex of exactly [bytes] bytes, with an optional `0x` prefix accepted on input. */
++private fun canonicalHex(raw: String?, bytes: Int): String? {
++    val digits = raw?.removePrefix("0x") ?: return null
++    if (digits.length != bytes * 2) return null
++    if (!digits.all { it in '0'..'9' || it in 'a'..'f' || it in 'A'..'F' }) return null
++    return digits.lowercase()
++}
++
++private fun String.isValidState(): Boolean =
++    length in 1..MAX_STATE_LENGTH && all { it.isStateCharacter() }
++
++private fun Char.isStateCharacter(): Boolean =
++    this in 'a'..'z' || this in 'A'..'Z' || this in '0'..'9' || this == '-' || this == '_'
++
++// Every legitimate value is hex, a small integer or a base64url state, so no
++// percent-decoding is ever needed; anything else is refused rather than decoded.
++private fun Char.isQueryCharacter(): Boolean = isStateCharacter() || this == '&' || this == '='
+diff --git a/shared/src/commonTest/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequestTest.kt b/shared/src/commonTest/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequestTest.kt
+new file mode 100644
+index 00000000..1d039147
+--- /dev/null
++++ b/shared/src/commonTest/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequestTest.kt
+@@ -0,0 +1,229 @@
++package org.levarac.beid.shared.eventkeysign
++
++import kotlin.test.Test
++import kotlin.test.assertEquals
++import kotlin.test.assertIs
++import kotlin.test.assertNull
++
++/**
++ * The golden vector below is the one mizar's claim contract and evaluator
++ * test against (mizar `docs/design/spec.md`, "App signature"). It was
++ * generated with `@noble/curves` 2.3.0, independently of Barnard, from the
++ * TEST-ONLY key `SHA256("beid/event-key-sign/v1 golden vector key")`, so a
++ * layout drift on either side shows up as a digest mismatch here.
++ */
++class EventKeySignRequestTest {
++    private val eventId = "996ab4d7cd0785199b715e6ff004f41ef740ead3b3363602ce1cb14b812d1f94"
++    private val challenge = "a1".repeat(32)
++    private val claimBody =
++        "0000000000000000000000000000000000000000000000000000000000aa36a7" +
++            "5fbdb2315678afecb367f032d93f642f64180aa3" +
++            "70997970c51812dc3a010c7d01b50e0d17dc79c8"
++
++    private val personhoodMessage =
++        "ff626569642f6576656e742d6b65792d7369676e2f76310001" + eventId + challenge
++    private val claimMessage =
++        "ff626569642f6576656e742d6b65792d7369676e2f76310002" + eventId + claimBody
++
++    private fun accepted(link: String): EventKeySignRequest =
++        assertIs<EventKeySignParseResult.Accepted>(parseEventKeySignLink(link)).request
++
++    private fun rejection(link: String): EventKeySignRejection =
++        assertIs<EventKeySignParseResult.Rejected>(parseEventKeySignLink(link)).reason
++
++    @Test
++    fun personhoodLinkBuildsTheGoldenMessage() {
++        val request = accepted("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=abc_DEF-123")
++
++        assertEquals(EventKeySignPurpose.PERSONHOOD_BINDING, request.purpose)
++        assertEquals(eventId, request.eventIdHex)
++        assertEquals(challenge, request.challengeHex)
++        assertNull(request.claimContractHex)
++        assertEquals("abc_DEF-123", request.state)
++        assertEquals(personhoodMessage, request.messageHex())
++        assertEquals(89, request.messageHex().length / 2)
++    }
++
++    @Test
++    fun claimLinkBuildsTheGoldenMessageAndDecodesItsFields() {
++        val request = accepted("beid://event-key-sign?v=1&p=02&e=0x$eventId&b=0x$claimBody&st=s1")
++
++        assertEquals(EventKeySignPurpose.CLAIM, request.purpose)
++        assertEquals("11155111", request.chainIdDecimal)
++        assertEquals("0x5fbdb2315678afecb367f032d93f642f64180aa3", request.claimContractHex)
++        assertEquals("0x70997970c51812dc3a010c7d01b50e0d17dc79c8", request.recipientHex)
++        assertNull(request.challengeHex)
++        assertEquals(claimMessage, request.messageHex())
++        assertEquals(129, request.messageHex().length / 2)
++    }
++
++    @Test
++    fun upperCaseHexIsCanonicalisedToLowerCase() {
++        val request = accepted(
++            "beid://event-key-sign?v=1&p=02&e=${eventId.uppercase()}&b=${claimBody.uppercase()}&st=s1",
++        )
++        assertEquals(claimMessage, request.messageHex())
++    }
++
++    @Test
++    fun parameterOrderDoesNotMatter() {
++        val request = accepted("beid://event-key-sign?st=s1&b=$challenge&e=$eventId&p=01&v=1")
++        assertEquals(personhoodMessage, request.messageHex())
++    }
++
++    @Test
++    fun optionalExpectedEventKeyIsCarriedForTheNativeCrossCheck() {
++        val key = "02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581"
++        val request = accepted("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=s1&k=$key")
++        assertEquals(key, request.expectedEventKeyHex)
++    }
++
++    @Test
++    fun linksThatAreNotThisEntryPointAreRejected() {
++        assertEquals(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK, rejection("metamask://connect?x=1"))
++        assertEquals(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK, rejection("beid://other?v=1"))
++        assertEquals(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK, rejection("https://event-key-sign?v=1"))
++        assertEquals(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK, rejection("beid://event-key-sign/path?v=1"))
++        assertEquals(EventKeySignRejection.NOT_EVENT_KEY_SIGN_LINK, rejection("beid://event-key-signer?v=1"))
++    }
++
++    @Test
++    fun malformedQueriesAreRejected() {
++        val base = "beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=s1"
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection("beid://event-key-sign"))
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection("$base#frag"))
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection("$base&novalue"))
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection("$base&&v=1"))
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection(base.replace("st=s1", "st=a%20b")))
++        assertEquals(EventKeySignRejection.DUPLICATE_PARAMETER, rejection("$base&p=02"))
++        assertEquals(EventKeySignRejection.UNKNOWN_PARAMETER, rejection("$base&cb=evil"))
++        // A URL-shaped value never gets as far as parameter names: `:`, `/`
++        // and `.` are not in the accepted character set.
++        assertEquals(EventKeySignRejection.MALFORMED_QUERY, rejection("$base&cb=https://evil.example"))
++    }
++
++    @Test
++    fun missingOrUnsupportedFieldsAreRejected() {
++        assertEquals(
++            EventKeySignRejection.UNSUPPORTED_VERSION,
++            rejection("beid://event-key-sign?v=2&p=01&e=$eventId&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.UNSUPPORTED_VERSION,
++            rejection("beid://event-key-sign?p=01&e=$eventId&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.UNKNOWN_PURPOSE,
++            rejection("beid://event-key-sign?v=1&p=03&e=$eventId&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.UNKNOWN_PURPOSE,
++            rejection("beid://event-key-sign?v=1&p=1&e=$eventId&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_EVENT_ID,
++            rejection("beid://event-key-sign?v=1&p=01&e=${eventId.drop(2)}&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_EVENT_ID,
++            rejection("beid://event-key-sign?v=1&p=01&e=${"zz" + eventId.drop(2)}&b=$challenge&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_STATE,
++            rejection("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_STATE,
++            rejection("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=${"x".repeat(65)}"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_EVENT_KEY,
++            rejection("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=s1&k=04${"00".repeat(32)}"),
++        )
++    }
++
++    @Test
++    fun bodiesMustHaveTheLengthAndContentOfTheirPurpose() {
++        // A claim body presented as a personhood request (and vice versa) is
++        // rejected by length, so one purpose can never be signed as the other.
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=01&e=$eventId&b=$claimBody&st=s1"),
++        )
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=02&e=$eventId&b=$challenge&st=s1"),
++        )
++        val zeroRecipient = claimBody.dropLast(40) + "00".repeat(20)
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=02&e=$eventId&b=$zeroRecipient&st=s1"),
++        )
++        val zeroContract = claimBody.take(64) + "00".repeat(20) + claimBody.takeLast(40)
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=02&e=$eventId&b=$zeroContract&st=s1"),
++        )
++        val zeroChain = "00".repeat(32) + claimBody.drop(64)
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=02&e=$eventId&b=$zeroChain&st=s1"),
++        )
++        val hugeChain = "80" + "00".repeat(31) + claimBody.drop(64)
++        assertEquals(
++            EventKeySignRejection.INVALID_BODY,
++            rejection("beid://event-key-sign?v=1&p=02&e=$eventId&b=$hugeChain&st=s1"),
++        )
++    }
++
++    @Test
++    fun everyMessageStartsWithTheReservedFirstByte() {
++        // 0xFF cannot begin CBOR (COSE Sig_structure starts 0x84), a UTF-8
++        // string (legacy WindowReport starts with the event code), or a
++        // Barnard "barnard-…" tag, so no message here equals any other
++        // message the event key signs.
++        val personhood = accepted("beid://event-key-sign?v=1&p=01&e=$eventId&b=$challenge&st=s1")
++        val claim = accepted("beid://event-key-sign?v=1&p=02&e=$eventId&b=$claimBody&st=s1")
++        assertEquals("ff", personhood.messageHex().take(2))
++        assertEquals("ff", claim.messageHex().take(2))
++    }
++
++    @Test
++    fun successFragmentCarriesAnEthereumStyleSignature() {
++        val fragment = eventKeySignSuccessFragment(
++            state = "s1",
++            rHex = "3f710e304a2fce9324cfd5540b90966bbc8cdd1969d4461e51ae658404571dcb",
++            sHex = "73b3866bb6649866d99b2f467f1e768c5144ce5e7126c1deb86c77ffb6dcf758",
++            recoveryId = 0,
++            eventKeyHex = "02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581",
++            eventKeyAddressHex = "0x05e8bdca0d0523483bc1a2f490a2f03cb00b776d",
++        )
++        assertEquals(
++            "v=1&st=s1" +
++                "&sig=0x3f710e304a2fce9324cfd5540b90966bbc8cdd1969d4461e51ae658404571dcb" +
++                "73b3866bb6649866d99b2f467f1e768c5144ce5e7126c1deb86c77ffb6dcf7581b" +
++                "&k=0x02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581" +
++                "&a=0x05e8bdca0d0523483bc1a2f490a2f03cb00b776d",
++            fragment,
++        )
++    }
++
++    @Test
++    fun successFragmentRejectsOutOfProfileSignatures() {
++        val r = "3f710e304a2fce9324cfd5540b90966bbc8cdd1969d4461e51ae658404571dcb"
++        val s = "73b3866bb6649866d99b2f467f1e768c5144ce5e7126c1deb86c77ffb6dcf758"
++        val key = "02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581"
++        val address = "0x05e8bdca0d0523483bc1a2f490a2f03cb00b776d"
++        assertNull(eventKeySignSuccessFragment("s1", r, s, 2, key, address))
++        assertNull(eventKeySignSuccessFragment("s1", r.drop(2), s, 0, key, address))
++        assertNull(eventKeySignSuccessFragment("s1", r, s, 1, key.drop(2), address))
++        assertNull(eventKeySignSuccessFragment("s1", r, s, 1, key, address.drop(4)))
++        assertNull(eventKeySignSuccessFragment("bad state", r, s, 1, key, address))
++    }
++
++    @Test
++    fun cancelledFragmentEchoesOnlyTheState() {
++        assertEquals("v=1&st=s1&err=cancelled", eventKeySignCancelledFragment("s1"))
++        assertNull(eventKeySignCancelledFragment("bad state"))
++    }
++}
+-- 
+2.52.0
+
+
+From ab55662d0cc52d6e81a758a25dff3a34a70d3c27 Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 06:29:20 +0900
+Subject: [PATCH 2/6] Let sensing say which event code signs an Event ID
+
+Adds a read-only lookup from a canonical Event ID to the event code this
+phone signs that event's observations with: the current session first,
+then persisted canonical submissions. The event-key signing entry point
+uses it so a web page cannot make the phone derive keys for events it
+never recorded. Also exposes the existing SensingCryptography instance.
+---
+ .../Sensing/ReportSubmissionRuntime.swift     | 17 ++++++++++++-
+ ios/Beid/Sensing/SensingCoordinator.swift     | 25 +++++++++++++++++++
+ 2 files changed, 41 insertions(+), 1 deletion(-)
+
+diff --git a/ios/Beid/Sensing/ReportSubmissionRuntime.swift b/ios/Beid/Sensing/ReportSubmissionRuntime.swift
+index 8413cd18..933432ce 100644
+--- a/ios/Beid/Sensing/ReportSubmissionRuntime.swift
++++ b/ios/Beid/Sensing/ReportSubmissionRuntime.swift
+@@ -136,12 +136,20 @@ protocol WindowReportSubmissionRuntimeProtocol: AnyObject {
+   /// persisted state — never triggers a network call or a write.
+   func submissionState(forEventCode eventCode: String) -> ReportSubmissionState?
+   func excludedWindowCount(forEventCode eventCode: String) -> Int
++
++  /// The event code a canonical Observation for `eventIdHex` was signed
++  /// under, from already-persisted records. A pure read; the event-key
++  /// signing entry point uses it to bind a web request's Event ID to the key
++  /// that actually observed that event.
++  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String?
+ }
+ 
+ extension WindowReportSubmissionRuntimeProtocol {
+   func labRecordProjection() -> Result<[LabRecordMetadata], ReportSubmissionStore.LabRecordProjectionError> {
+     .failure(.unreadable)
+   }
++
++  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String? { nil }
+ }
+ 
+ /// Native composition boundary for the inactive-by-default report pipeline.
+@@ -396,6 +404,11 @@ final class ReportSubmissionRuntime: WindowReportSubmissionRuntimeProtocol {
+     store.labRecordProjection()
+   }
+ 
++  func eventCode(forCanonicalEventIdHex eventIdHex: String) -> String? {
++    guard let wanted = eventIdHex.normalizedCanonicalEventIdHex else { return nil }
++    return store.records.last { $0.eventIdHex?.normalizedCanonicalEventIdHex == wanted }?.eventCode
++  }
++
+   func submitPending() {
+     for capture in store.pendingCaptures {
+       processPendingCapture(capture)
+@@ -601,7 +614,9 @@ private extension ReportSubmissionState {
+   }
+ }
+ 
+-private extension String {
++extension String {
++  /// Lowercase 64-hex Event ID without `0x`, or nil. Internal (not private)
++  /// because the event-key signing entry point matches Event IDs the same way.
+   var normalizedCanonicalEventIdHex: String? {
+     let value = hasPrefix("0x") || hasPrefix("0X") ? String(dropFirst(2)) : self
+     guard value.count == 64,
+diff --git a/ios/Beid/Sensing/SensingCoordinator.swift b/ios/Beid/Sensing/SensingCoordinator.swift
+index ba31f62d..cd69a5e9 100644
+--- a/ios/Beid/Sensing/SensingCoordinator.swift
++++ b/ios/Beid/Sensing/SensingCoordinator.swift
+@@ -3375,6 +3375,31 @@ final class SensingCoordinator: ObservableObject {
+     }
+   }
+ 
++  /// The event-key signing entry point's only view into sensing: which event
++  /// code this phone signs `eventIdHex`'s observations under (the current
++  /// session if it is that event, else the persisted canonical submissions),
++  /// and a display name when the session supplies one. `nil` when this phone
++  /// has no record of the event, so a page cannot make it derive keys for
++  /// events it never attended.
++  func eventKeySigningEvent(
++    forCanonicalEventIdHex eventIdHex: String
++  ) -> (eventCode: String, displayName: String?)? {
++    guard let wanted = eventIdHex.normalizedCanonicalEventIdHex else { return nil }
++    switch phase {
++    case .eventFound(let session), .recording(let session, _), .signalLost(let session, _):
++      if session.canonicalEventIdHex?.normalizedCanonicalEventIdHex == wanted {
++        return (session.id, session.name)
++      }
++    case .idle, .sensing:
++      break
++    }
++    guard let eventCode = reportSubmissionRuntime?.eventCode(forCanonicalEventIdHex: wanted) else { return nil }
++    return (eventCode, nil)
++  }
++
++  /// The same Barnard-backed key owner that signs this phone's observations.
++  var eventKeySigningCryptography: any SensingCryptography { sensingCryptography }
++
+   /// Starts (or resumes) this attempt, moving to `.connecting` and
+   /// returning the `0x`-prefixed hex the wallet's `personal_sign` must
+   /// sign — the UTF-8 bytes of the literal `barnard-account-binding:v1`
+-- 
+2.52.0
+
+
+From 330a2867938a88595a94b72505e7699d2909b723 Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 06:29:21 +0900
+Subject: [PATCH 3/6] Add iOS handler and confirmation sheet for event-key
+ signing links
+
+beid://event-key-sign links are parsed by the shared codec, bound to a
+recorded event, shown to the participant, and signed with the same
+Barnard key owner that signs observations. The signature is recovered
+and compared with the event key before it is returned, and it goes only
+to the https callback compiled in for its purpose (placeholder .invalid
+hosts until alcor and mizar are deployed). MetaMask links still pass
+through untouched.
+---
+ ios/Beid/App/BeidApp.swift                    |  23 +-
+ .../EventKeySignCoordinator.swift             | 222 ++++++++++++++++++
+ ios/Beid/EventKeySign/EventKeySignSheet.swift | 135 +++++++++++
+ ios/project.yml                               |   8 +
+ 4 files changed, 387 insertions(+), 1 deletion(-)
+ create mode 100644 ios/Beid/EventKeySign/EventKeySignCoordinator.swift
+ create mode 100644 ios/Beid/EventKeySign/EventKeySignSheet.swift
+
+diff --git a/ios/Beid/App/BeidApp.swift b/ios/Beid/App/BeidApp.swift
+index 2504779e..81b1ed81 100644
+--- a/ios/Beid/App/BeidApp.swift
++++ b/ios/Beid/App/BeidApp.swift
+@@ -5,13 +5,34 @@ import SwiftUI
+ 
+ @main
+ struct BeidApp: App {
+-  @StateObject private var coordinator = AppCoordinator()
++  @StateObject private var coordinator: AppCoordinator
++  @StateObject private var eventKeySign: EventKeySignCoordinator
++
++  init() {
++    let app = AppCoordinator()
++    _coordinator = StateObject(wrappedValue: app)
++    _eventKeySign = StateObject(wrappedValue: EventKeySignCoordinator(
++      resolveEvent: { eventIdHex in
++        guard let event = app.sensingCoordinator.eventKeySigningEvent(forCanonicalEventIdHex: eventIdHex) else {
++          return nil
++        }
++        let recordedName = app.proofStore.proofs.last { $0.eventCode == event.eventCode }?.eventName
++        return (event.eventCode, event.displayName ?? recordedName)
++      },
++      cryptography: { app.sensingCoordinator.eventKeySigningCryptography },
++      openURL: { UIApplication.shared.open($0) }
++    ))
++  }
+ 
+   var body: some Scene {
+     WindowGroup {
+       RootView()
+         .environmentObject(coordinator)
++        .modifier(EventKeySignPresentation(coordinator: eventKeySign))
+         .onOpenURL { url in
++          // MetaMask shares the `beid` scheme; the signing entry point
++          // claims only its own host and passes everything else on.
++          if eventKeySign.handle(url: url) { return }
+           MetaMaskConnector.shared.handle(url: url)
+         }
+     }
+diff --git a/ios/Beid/EventKeySign/EventKeySignCoordinator.swift b/ios/Beid/EventKeySign/EventKeySignCoordinator.swift
+new file mode 100644
+index 00000000..ed9cdc68
+--- /dev/null
++++ b/ios/Beid/EventKeySign/EventKeySignCoordinator.swift
+@@ -0,0 +1,222 @@
++// Copyright 2024-2026 The Greeting Inc. All rights reserved.
++// Use of this source code is governed by a BSD-style license.
++
++import BarnardCore
++import CryptoKit
++import Foundation
++import os
++
++/// Native half of the event-key signing entry point.
++///
++/// `BeidSharedKit.eventkeysign` decides whether a `beid://event-key-sign` link
++/// is acceptable and which bytes are signed. This type does the platform
++/// part: bind the link's Event ID to an event this phone actually recorded,
++/// ask the participant, sign through the same Barnard key owner that signs
++/// observations, check the signature recovers to that key, and open the
++/// callback compiled in for the purpose. The result never goes anywhere a
++/// link names, and nothing is signed without an explicit tap.
++@MainActor
++final class EventKeySignCoordinator: ObservableObject {
++  enum Purpose: Equatable {
++    case personhoodBinding
++    case claim(chainId: String, contract: String, recipient: String)
++  }
++
++  struct Pending: Identifiable, Equatable {
++    let id = UUID()
++    let purpose: Purpose
++    let eventTitle: String
++    let callbackHost: String
++
++    fileprivate let eventCode: String
++    fileprivate let eventKey: Data
++    fileprivate let message: Data
++    fileprivate let state: String
++    fileprivate let callback: URL
++  }
++
++  enum Failure: Equatable, Identifiable {
++    case eventNotOnThisPhone
++    case keyMismatch
++    case unavailable
++
++    var id: Self { self }
++  }
++
++  /// The two https callbacks, one per purpose, read from the app's build
++  /// settings. A missing or non-https value leaves that purpose disabled.
++  struct Callbacks: Equatable {
++    let personhoodBinding: URL?
++    let claim: URL?
++
++    static func fromBundle(_ bundle: Bundle = .main) -> Callbacks {
++      Callbacks(
++        personhoodBinding: validated(bundle.object(forInfoDictionaryKey: "BeidEventKeySignPersonhoodCallbackURL")),
++        claim: validated(bundle.object(forInfoDictionaryKey: "BeidEventKeySignClaimCallbackURL"))
++      )
++    }
++
++    static func validated(_ value: Any?) -> URL? {
++      guard
++        let string = value as? String,
++        let components = URLComponents(string: string),
++        components.scheme == "https",
++        components.host?.isEmpty == false,
++        components.user == nil,
++        components.password == nil,
++        components.fragment == nil,
++        let url = components.url
++      else { return nil }
++      return url
++    }
++  }
++
++  @Published private(set) var pending: Pending?
++  @Published var failure: Failure?
++
++  private static let log = Logger(subsystem: "org.levarac.beid", category: "EventKeySign")
++
++  private let resolveEvent: (String) -> (eventCode: String, displayName: String?)?
++  private let cryptography: () -> any SensingCryptography
++  private let callbacks: Callbacks
++  private let openURL: (URL) -> Void
++
++  init(
++    resolveEvent: @escaping (String) -> (eventCode: String, displayName: String?)?,
++    cryptography: @escaping () -> any SensingCryptography,
++    callbacks: Callbacks = .fromBundle(),
++    openURL: @escaping (URL) -> Void
++  ) {
++    self.resolveEvent = resolveEvent
++    self.cryptography = cryptography
++    self.callbacks = callbacks
++    self.openURL = openURL
++  }
++
++  /// Returns `true` for every `beid://event-key-sign` link, handled or
++  /// refused, so the caller does not pass it on to the wallet connector.
++  func handle(url: URL) -> Bool {
++    guard url.scheme?.lowercased() == "beid", url.host == "event-key-sign" else { return false }
++    // One request at a time: a second link cannot replace the one the
++    // participant is reading.
++    guard pending == nil else { return true }
++
++    let parsed = BeidSharedKit.eventkeysign.parseEventKeySignLink(link: url.absoluteString)
++    guard let accepted = parsed as? BeidSharedKit.eventkeysign.EventKeySignParseResult.Accepted else {
++      Self.log.error("Refused an event-key signing link that did not parse")
++      return true
++    }
++    let request = accepted.request
++
++    let purpose: Purpose
++    let callback: URL?
++    switch request.purpose {
++    case .PERSONHOOD_BINDING:
++      purpose = .personhoodBinding
++      callback = callbacks.personhoodBinding
++    case .CLAIM:
++      guard
++        let chainId = request.chainIdDecimal,
++        let contract = request.claimContractHex,
++        let recipient = request.recipientHex
++      else { return refuse(.unavailable) }
++      purpose = .claim(chainId: chainId, contract: contract, recipient: recipient)
++      callback = callbacks.claim
++    default:
++      return refuse(.unavailable)
++    }
++    guard let callback, let callbackHost = callback.host else { return refuse(.unavailable) }
++
++    guard let event = resolveEvent(request.eventIdHex) else { return refuse(.eventNotOnThisPhone) }
++    let eventKey = cryptography().eventSigningPublicKey(eventCode: event.eventCode)
++    if let expected = request.expectedEventKeyHex, expected != eventKey.eventKeySignHex {
++      return refuse(.keyMismatch)
++    }
++    guard let message = Data(eventKeySignHex: request.messageHex()) else { return refuse(.unavailable) }
++
++    pending = Pending(
++      purpose: purpose,
++      eventTitle: event.displayName ?? "Event \(request.eventIdHex.prefix(8))",
++      callbackHost: callbackHost,
++      eventCode: event.eventCode,
++      eventKey: eventKey,
++      message: message,
++      state: request.state,
++      callback: callback
++    )
++    return true
++  }
++
++  /// Signs the pending message and hands the result to its callback. The
++  /// signature is recovered and compared with the event key first, so a page
++  /// never receives a signature that would not verify.
++  func approve() {
++    guard let request = pending else { return }
++    pending = nil
++
++    let signature = cryptography().signWindowReport(eventCode: request.eventCode, bytes: request.message)
++    let digest = [UInt8](SHA256.hash(data: request.message))
++    guard
++      signature.v == 0 || signature.v == 1,
++      let recovered = BarnardCoreSigning.recoverPublicKey(
++        recoveryId: signature.v,
++        r: [UInt8](signature.r),
++        s: [UInt8](signature.s),
++        messageHash32: digest
++      ),
++      recovered == [UInt8](request.eventKey),
++      let address = BarnardCoreSigning.ethereumAddress(publicKeyCompressed: [UInt8](request.eventKey)),
++      let fragment = BeidSharedKit.eventkeysign.eventKeySignSuccessFragment(
++        state: request.state,
++        rHex: signature.r.eventKeySignHex,
++        sHex: signature.s.eventKeySignHex,
++        recoveryId: Int32(signature.v),
++        eventKeyHex: request.eventKey.eventKeySignHex,
++        eventKeyAddressHex: "0x" + Data(address).eventKeySignHex
++      ),
++      let url = URL(string: request.callback.absoluteString + "#" + fragment)
++    else {
++      Self.log.error("Event-key signature did not recover to the event key; nothing was returned")
++      failure = .unavailable
++      return
++    }
++    openURL(url)
++  }
++
++  /// Tells the page the participant declined, without signing anything.
++  func decline() {
++    guard let request = pending else { return }
++    pending = nil
++    guard
++      let fragment = BeidSharedKit.eventkeysign.eventKeySignCancelledFragment(state: request.state),
++      let url = URL(string: request.callback.absoluteString + "#" + fragment)
++    else { return }
++    openURL(url)
++  }
++
++  private func refuse(_ reason: Failure) -> Bool {
++    Self.log.error("Refused an event-key signing request")
++    failure = reason
++    return true
++  }
++}
++
++private extension Data {
++  init?(eventKeySignHex hex: String) {
++    guard hex.count.isMultiple(of: 2) else { return nil }
++    var bytes = [UInt8]()
++    bytes.reserveCapacity(hex.count / 2)
++    var index = hex.startIndex
++    while index < hex.endIndex {
++      let next = hex.index(index, offsetBy: 2)
++      guard let byte = UInt8(hex[index..<next], radix: 16) else { return nil }
++      bytes.append(byte)
++      index = next
++    }
++    self.init(bytes)
++  }
++
++  var eventKeySignHex: String {
++    map { String(format: "%02x", $0) }.joined()
++  }
++}
+diff --git a/ios/Beid/EventKeySign/EventKeySignSheet.swift b/ios/Beid/EventKeySign/EventKeySignSheet.swift
+new file mode 100644
+index 00000000..85f5bbdf
+--- /dev/null
++++ b/ios/Beid/EventKeySign/EventKeySignSheet.swift
+@@ -0,0 +1,135 @@
++// Copyright 2024-2026 The Greeting Inc. All rights reserved.
++// Use of this source code is governed by a BSD-style license.
++
++import SwiftUI
++
++/// The one screen between a web page's signing request and the event key.
++///
++/// It shows only fields the app decoded itself, never text the page
++/// supplied. A claim shows the full recipient address in groups of four: a
++/// truncated `0x12AB…9F3E` can be matched by a generated look-alike.
++struct EventKeySignSheet: View {
++  let request: EventKeySignCoordinator.Pending
++  let onConfirm: () -> Void
++  let onDecline: () -> Void
++
++  var body: some View {
++    VStack(alignment: .leading, spacing: DS.Space.l) {
++      VStack(alignment: .leading, spacing: DS.Space.s) {
++        Text(title)
++          .font(DS.Font.sectionTitle)
++          .foregroundStyle(DS.Color.textPrimary)
++        Text(verbatim: request.eventTitle)
++          .font(DS.Font.body)
++          .foregroundStyle(DS.Color.textPrimary)
++      }
++
++      if case let .claim(chainId, contract, recipient) = request.purpose {
++        VStack(alignment: .leading, spacing: DS.Space.m) {
++          field("Recipient", value: Self.grouped(recipient))
++          field("Network", value: Self.networkName(chainId: chainId))
++          field("Contract", value: Self.grouped(contract))
++        }
++      }
++
++      Text(explanation)
++        .font(DS.Font.supporting)
++        .foregroundStyle(DS.Color.textSecondary)
++
++      Spacer(minLength: 0)
++
++      VStack(spacing: DS.Space.s) {
++        BeidPrimaryButton(confirmTitle, action: onConfirm)
++          .accessibilityIdentifier("eventKeySign.confirm")
++        BeidSecondaryButton(title: "Not now", action: onDecline)
++          .accessibilityIdentifier("eventKeySign.decline")
++      }
++    }
++    .padding(DS.Space.pageMargin)
++    .frame(maxWidth: DS.Layout.stateContentMaxWidth, alignment: .leading)
++    .background(DS.Color.surfaceCanvas)
++    .interactiveDismissDisabled()
++  }
++
++  private var title: LocalizedStringKey {
++    switch request.purpose {
++    case .personhoodBinding: "Confirm you are one person"
++    case .claim: "Send your event record"
++    }
++  }
++
++  private var confirmTitle: LocalizedStringKey {
++    switch request.purpose {
++    case .personhoodBinding: "Confirm"
++    case .claim: "Send record"
++    }
++  }
++
++  private var explanation: LocalizedStringKey {
++    switch request.purpose {
++    case .personhoodBinding:
++      "The result goes to \(request.callbackHost). Your record for this event will be linked to this check."
++    case .claim:
++      "The result goes to \(request.callbackHost). Only continue if the recipient above is an address you chose. This links that address to your record for this event."
++    }
++  }
++
++  private func field(_ label: LocalizedStringKey, value: String) -> some View {
++    VStack(alignment: .leading, spacing: DS.Space.xs) {
++      Text(label)
++        .font(DS.Font.meta)
++        .foregroundStyle(DS.Color.textSecondary)
++      Text(verbatim: value)
++        .font(DS.Font.ledgerMono)
++        .foregroundStyle(DS.Color.textPrimary)
++        .textSelection(.enabled)
++        .fixedSize(horizontal: false, vertical: true)
++    }
++    .accessibilityElement(children: .combine)
++  }
++
++  /// `0x12ab34cd…` → `0x12AB 34CD …`, every character shown.
++  static func grouped(_ address: String) -> String {
++    let digits = address.hasPrefix("0x") ? String(address.dropFirst(2)) : address
++    var groups: [String] = []
++    var index = digits.startIndex
++    while index < digits.endIndex {
++      let next = digits.index(index, offsetBy: 4, limitedBy: digits.endIndex) ?? digits.endIndex
++      groups.append(String(digits[index..<next]).uppercased())
++      index = next
++    }
++    return "0x" + groups.joined(separator: " ")
++  }
++
++  static func networkName(chainId: String) -> String {
++    switch chainId {
++    case "1": "Ethereum"
++    case "11155111": "Sepolia (test network)"
++    default: "Network \(chainId)"
++    }
++  }
++}
++
++/// Presents the pending request and any refusal. Applied once at the root.
++struct EventKeySignPresentation: ViewModifier {
++  @ObservedObject var coordinator: EventKeySignCoordinator
++
++  func body(content: Content) -> some View {
++    content
++      .sheet(item: Binding(get: { coordinator.pending }, set: { _ in })) { request in
++        EventKeySignSheet(request: request, onConfirm: coordinator.approve, onDecline: coordinator.decline)
++          .presentationDetents([.large])
++      }
++      .alert(item: $coordinator.failure) { failure in
++        Alert(title: Text(Self.message(for: failure)))
++      }
++  }
++
++  private static func message(for failure: EventKeySignCoordinator.Failure) -> LocalizedStringKey {
++    switch failure {
++    case .eventNotOnThisPhone: "This event isn't recorded on this phone."
++    case .keyMismatch: "This request is for a different phone."
++    case .unavailable: "This request can't be completed here."
++    }
++  }
++}
+diff --git a/ios/project.yml b/ios/project.yml
+index f7aff55a..11d9aa33 100644
+--- a/ios/project.yml
++++ b/ios/project.yml
+@@ -67,6 +67,8 @@ targets:
+         BeidVenueBundleURLTemplate: "$(BEID_VENUE_BUNDLE_URL_TEMPLATE)"
+         BeidEventCodeLookupURLTemplate: "$(BEID_EVENT_CODE_LOOKUP_URL_TEMPLATE)"
+         BeidEventCodeHashLookupURLTemplate: "$(BEID_EVENT_CODE_HASH_LOOKUP_URL_TEMPLATE)"
++        BeidEventKeySignPersonhoodCallbackURL: "$(BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL)"
++        BeidEventKeySignClaimCallbackURL: "$(BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL)"
+         BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
+         CFBundleShortVersionString: "$(MARKETING_VERSION)"
+         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+@@ -123,6 +125,12 @@ targets:
+         # what changes the App Store privacy answer: keep
+         # docs/app-store/privacy-labels.md in step with it.
+         BEID_REPORT_SUBMISSION_ENABLED: "YES"
++        # Event-key signing entry point: the only places a signature may be
++        # sent, one per purpose. Placeholders on the non-resolving .invalid
++        # TLD until the alcor and mizar hosts are decided; a non-https or
++        # empty value disables that purpose.
++        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor.levarac.invalid/bind/callback"
++        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://mizar.levarac.invalid/claim/callback"
+         # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
+         # above. Route existence verified live: GET /artifacts/key-sets/<a
+         # wrong digest> -> 404 "EventKeySet artifact not found", not 500.
+-- 
+2.52.0
+
+
+From 25d6015f7f8ecbca80340ebdccfc1569402c567b Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 06:29:21 +0900
+Subject: [PATCH 4/6] Test the event-key signing handler against the mizar
+ golden vector
+
+---
+ .../EventKeySignCoordinatorTests.swift        | 248 ++++++++++++++++++
+ 1 file changed, 248 insertions(+)
+ create mode 100644 ios/BeidTests/EventKeySignCoordinatorTests.swift
+
+diff --git a/ios/BeidTests/EventKeySignCoordinatorTests.swift b/ios/BeidTests/EventKeySignCoordinatorTests.swift
+new file mode 100644
+index 00000000..71400bab
+--- /dev/null
++++ b/ios/BeidTests/EventKeySignCoordinatorTests.swift
+@@ -0,0 +1,248 @@
++// Copyright 2024-2026 The Greeting Inc. All rights reserved.
++// Use of this source code is governed by a BSD-style license.
++
++import BarnardCore
++import CryptoKit
++import XCTest
++@testable import Beid
++
++/// The golden vector is the one mizar's contract and evaluator test against
++/// (shared `EventKeySignRequestTest`). It was produced with `@noble/curves`,
++/// so signing it here with Barnard and getting the same bytes back shows the
++/// two RFC 6979 low-S implementations agree end to end.
++@MainActor
++final class EventKeySignCoordinatorTests: XCTestCase {
++  // TEST KEY ONLY: SHA256("beid/event-key-sign/v1 golden vector key").
++  private static let testPrivateKeyHex = "289dff4932755a4e636361c4f2a5264e5bde7cde6d6a5a9c81bf201864d7b971"
++  private static let testEventKeyHex = "02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581"
++  private static let eventIdHex = "996ab4d7cd0785199b715e6ff004f41ef740ead3b3363602ce1cb14b812d1f94"
++  private static let claimBody =
++    "0000000000000000000000000000000000000000000000000000000000aa36a7"
++    + "5fbdb2315678afecb367f032d93f642f64180aa3"
++    + "70997970c51812dc3a010c7d01b50e0d17dc79c8"
++  private static let claimLink = URL(string:
++    "beid://event-key-sign?v=1&p=02&e=\(eventIdHex)&b=\(claimBody)&st=state_1&k=\(testEventKeyHex)")!
++  private static let personhoodLink = URL(string:
++    "beid://event-key-sign?v=1&p=01&e=\(eventIdHex)&b=\(String(repeating: "a1", count: 32))&st=state_2")!
++
++  private static let callbacks = EventKeySignCoordinator.Callbacks(
++    personhoodBinding: URL(string: "https://alcor.example.test/bind/callback"),
++    claim: URL(string: "https://mizar.example.test/claim/callback")
++  )
++
++  private var opened: [URL] = []
++  private var signer: GoldenKeySigner!
++
++  override func setUp() {
++    super.setUp()
++    opened = []
++    signer = GoldenKeySigner(privateKey: Self.bytes(Self.testPrivateKeyHex), publicKey: Self.bytes(Self.testEventKeyHex))
++  }
++
++  private func makeCoordinator(
++    recordedEventIdHex: String? = eventIdHex,
++    callbacks: EventKeySignCoordinator.Callbacks = callbacks
++  ) -> EventKeySignCoordinator {
++    let signer = self.signer!
++    return EventKeySignCoordinator(
++      resolveEvent: { requested in
++        requested == recordedEventIdHex ? ("golden-event-code", "Golden Event") : nil
++      },
++      cryptography: { signer },
++      callbacks: callbacks,
++      openURL: { [weak self] url in self?.opened.append(url) }
++    )
++  }
++
++  func testClaimReturnsTheGoldenSignatureToTheClaimCallbackOnly() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++    let pending = try? XCTUnwrap(coordinator.pending)
++    XCTAssertEqual(pending?.eventTitle, "Golden Event")
++    XCTAssertEqual(pending?.callbackHost, "mizar.example.test")
++    XCTAssertEqual(
++      pending?.purpose,
++      .claim(
++        chainId: "11155111",
++        contract: "0x5fbdb2315678afecb367f032d93f642f64180aa3",
++        recipient: "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
++      )
++    )
++    XCTAssertTrue(opened.isEmpty, "nothing may leave the app before the participant confirms")
++
++    coordinator.approve()
++
++    XCTAssertNil(coordinator.pending)
++    XCTAssertNil(coordinator.failure)
++    XCTAssertEqual(opened.map(\.absoluteString), [
++      "https://mizar.example.test/claim/callback#v=1&st=state_1"
++        + "&sig=0x3f710e304a2fce9324cfd5540b90966bbc8cdd1969d4461e51ae658404571dcb"
++        + "73b3866bb6649866d99b2f467f1e768c5144ce5e7126c1deb86c77ffb6dcf7581b"
++        + "&k=0x02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581"
++        + "&a=0x05e8bdca0d0523483bc1a2f490a2f03cb00b776d",
++    ])
++    XCTAssertEqual(signer.signedEventCodes, ["golden-event-code"])
++  }
++
++  func testPersonhoodSignsTheGoldenMessageWithTheRecordedEventsKey() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: Self.personhoodLink))
++    coordinator.approve()
++
++    let fragment = opened.first.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.fragment }
++    XCTAssertEqual(opened.first?.host, "alcor.example.test")
++    XCTAssertTrue(fragment?.contains(
++      "sig=0xb590702126af9e2a06084467616635796968aa89dace7659880c55c471f5bf29"
++        + "3443f426bfd0fd8528bcf518f062580b9b83015a722bde22536d8f687c63e6421b"
++    ) == true, fragment ?? "no callback")
++  }
++
++  func testDeclineReturnsOnlyTheStateAndSignsNothing() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++    coordinator.decline()
++
++    XCTAssertEqual(opened.map(\.absoluteString), [
++      "https://mizar.example.test/claim/callback#v=1&st=state_1&err=cancelled",
++    ])
++    XCTAssertTrue(signer.signedEventCodes.isEmpty)
++  }
++
++  func testAnEventThisPhoneNeverRecordedIsRefusedWithoutDerivingAKey() {
++    let coordinator = makeCoordinator(recordedEventIdHex: nil)
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++
++    XCTAssertNil(coordinator.pending)
++    XCTAssertEqual(coordinator.failure, .eventNotOnThisPhone)
++    XCTAssertTrue(signer.publicKeyRequests.isEmpty)
++    XCTAssertTrue(opened.isEmpty)
++  }
++
++  func testAnExpectedKeyThatIsNotThisPhonesIsRefused() {
++    let coordinator = makeCoordinator()
++    let otherKey = "03" + String(repeating: "11", count: 32)
++    let link = URL(string: Self.claimLink.absoluteString.replacingOccurrences(of: Self.testEventKeyHex, with: otherKey))!
++
++    XCTAssertTrue(coordinator.handle(url: link))
++
++    XCTAssertNil(coordinator.pending)
++    XCTAssertEqual(coordinator.failure, .keyMismatch)
++  }
++
++  func testOtherBeidLinksAreLeftForTheWalletConnector() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertFalse(coordinator.handle(url: URL(string: "beid://mmsdk?message=abc")!))
++    XCTAssertFalse(coordinator.handle(url: URL(string: "https://event-key-sign/?v=1")!))
++    XCTAssertNil(coordinator.pending)
++    XCTAssertNil(coordinator.failure)
++  }
++
++  func testAMalformedSigningLinkIsConsumedButShowsNothing() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: URL(string: "beid://event-key-sign?v=1&p=02&cb=evil")!))
++    XCTAssertNil(coordinator.pending)
++    XCTAssertTrue(opened.isEmpty)
++  }
++
++  func testASecondLinkCannotReplaceTheOneBeingRead() {
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++    let first = coordinator.pending?.id
++    XCTAssertTrue(coordinator.handle(url: Self.personhoodLink))
++
++    XCTAssertEqual(coordinator.pending?.id, first)
++  }
++
++  func testAPurposeWithoutAValidCallbackIsRefused() {
++    let coordinator = makeCoordinator(callbacks: .init(personhoodBinding: Self.callbacks.personhoodBinding, claim: nil))
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++
++    XCTAssertNil(coordinator.pending)
++    XCTAssertEqual(coordinator.failure, .unavailable)
++  }
++
++  func testASignatureThatDoesNotRecoverToTheEventKeyIsNeverReturned() {
++    signer.corruptSignatures = true
++    let coordinator = makeCoordinator()
++
++    XCTAssertTrue(coordinator.handle(url: Self.claimLink))
++    coordinator.approve()
++
++    XCTAssertTrue(opened.isEmpty)
++    XCTAssertEqual(coordinator.failure, .unavailable)
++  }
++
++  func testCallbacksMustBePlainHttps() {
++    typealias Callbacks = EventKeySignCoordinator.Callbacks
++    XCTAssertNotNil(Callbacks.validated("https://mizar.example.test/claim/callback"))
++    XCTAssertNil(Callbacks.validated("http://mizar.example.test/claim/callback"))
++    XCTAssertNil(Callbacks.validated("beid://event-key-sign"))
++    XCTAssertNil(Callbacks.validated("https://user@mizar.example.test/cb"))
++    XCTAssertNil(Callbacks.validated("https://mizar.example.test/cb#already"))
++    XCTAssertNil(Callbacks.validated("https:///cb"))
++    XCTAssertNil(Callbacks.validated(""))
++    XCTAssertNil(Callbacks.validated(nil))
++  }
++
++  func testRecipientIsShownInFullInGroupsOfFour() {
++    XCTAssertEqual(
++      EventKeySignSheet.grouped("0x70997970c51812dc3a010c7d01b50e0d17dc79c8"),
++      "0x7099 7970 C518 12DC 3A01 0C7D 01B5 0E0D 17DC 79C8"
++    )
++  }
++
++  private static func bytes(_ hex: String) -> [UInt8] {
++    stride(from: 0, to: hex.count, by: 2).map { offset in
++      let start = hex.index(hex.startIndex, offsetBy: offset)
++      return UInt8(hex[start..<hex.index(start, offsetBy: 2)], radix: 16)!
++    }
++  }
++}
++
++/// Signs with a fixed test key through Barnard's own primitive, exactly as
++/// `BarnardIdentity.sign(eventCode:bytes:)` does with a derived key.
++private final class GoldenKeySigner: SensingCryptography {
++  let privateKey: [UInt8]
++  let publicKey: [UInt8]
++  var corruptSignatures = false
++  private(set) var signedEventCodes: [String] = []
++  private(set) var publicKeyRequests: [String] = []
++
++  init(privateKey: [UInt8], publicKey: [UInt8]) {
++    self.privateKey = privateKey
++    self.publicKey = publicKey
++  }
++
++  func eventSigningPublicKey(eventCode: String) -> Data {
++    publicKeyRequests.append(eventCode)
++    return Data(publicKey)
++  }
++
++  func ownerPublicKey() throws -> Data { Data() }
++
++  func signWindowReport(eventCode: String, bytes: Data) -> SensingRecoverableSignature {
++    signedEventCodes.append(eventCode)
++    let digest = [UInt8](SHA256.hash(data: bytes))
++    let signature = SensingRecoverableSignature(
++      barnardCore: BarnardCoreSigning.signRecoverable(privateKey: privateKey, messageHash32: digest)
++    )
++    guard corruptSignatures else { return signature }
++    var s = signature.s
++    s[s.count - 1] ^= 0x01
++    return SensingRecoverableSignature(r: signature.r, s: s, v: signature.v)
++  }
++
++  func signSelfProof(eventIdHash: Data, eventSigningPublicKey: Data, eninStart: UInt64, eninEnd: UInt64) throws
++    -> SensingRecoverableSignature? { nil }
++
++  func signWalletAcknowledgement(walletAddress: Data, walletSignature: Data) throws
++    -> SensingRecoverableSignature? { nil }
++}
+-- 
+2.52.0
+
+
+From b648ecf7212cd14a0014bbdd78ef56c8d2307257 Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 06:42:11 +0900
+Subject: [PATCH 5/6] Import BeidSharedKit in the signing handler and carry its
+ callbacks in Info.plist
+
+---
+ ios/Beid/App/Info.plist                             | 4 ++++
+ ios/Beid/EventKeySign/EventKeySignCoordinator.swift | 1 +
+ 2 files changed, 5 insertions(+)
+
+diff --git a/ios/Beid/App/Info.plist b/ios/Beid/App/Info.plist
+index 0c34c4cb..593e36e9 100644
+--- a/ios/Beid/App/Info.plist
++++ b/ios/Beid/App/Info.plist
+@@ -12,6 +12,10 @@
+ 	<string>$(BEID_EVENT_DEFINITION_URL_TEMPLATE)</string>
+ 	<key>BeidEventKeySetURLTemplate</key>
+ 	<string>$(BEID_EVENT_KEY_SET_URL_TEMPLATE)</string>
++	<key>BeidEventKeySignClaimCallbackURL</key>
++	<string>$(BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL)</string>
++	<key>BeidEventKeySignPersonhoodCallbackURL</key>
++	<string>$(BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL)</string>
+ 	<key>BeidEventRegistryReaderAddress</key>
+ 	<string>$(BEID_EVENT_REGISTRY_READER_ADDRESS)</string>
+ 	<key>BeidReportSubmissionEnabled</key>
+diff --git a/ios/Beid/EventKeySign/EventKeySignCoordinator.swift b/ios/Beid/EventKeySign/EventKeySignCoordinator.swift
+index ed9cdc68..37e74f1e 100644
+--- a/ios/Beid/EventKeySign/EventKeySignCoordinator.swift
++++ b/ios/Beid/EventKeySign/EventKeySignCoordinator.swift
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license.
+ 
+ import BarnardCore
++import BeidSharedKit
+ import CryptoKit
+ import Foundation
+ import os
+-- 
+2.52.0
+
+
+From a5b6165a09440cc89769d20f8906034666653cb0 Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 15:45:08 +0900
+Subject: [PATCH 6/6] Point event-key signing callbacks at the alcor and mizar
+ pages
+
+---
+ ios/project.yml | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/ios/project.yml b/ios/project.yml
+index 11d9aa33..0c43700f 100644
+--- a/ios/project.yml
++++ b/ios/project.yml
+@@ -126,11 +126,10 @@ targets:
+         # docs/app-store/privacy-labels.md in step with it.
+         BEID_REPORT_SUBMISSION_ENABLED: "YES"
+         # Event-key signing entry point: the only places a signature may be
+-        # sent, one per purpose. Placeholders on the non-resolving .invalid
+-        # TLD until the alcor and mizar hosts are decided; a non-https or
+-        # empty value disables that purpose.
+-        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor.levarac.invalid/bind/callback"
+-        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://mizar.levarac.invalid/claim/callback"
++        # sent, one per purpose: the alcor join page and the mizar claim page.
++        # A non-https or empty value disables that purpose.
++        BEID_EVENT_KEY_SIGN_PERSONHOOD_CALLBACK_URL: "https://alcor-human-check.levarac.workers.dev/"
++        BEID_EVENT_KEY_SIGN_CLAIM_CALLBACK_URL: "https://levarac-mizar-claim.levarac.workers.dev/"
+         # Same non-secret reasoning as BEID_EVENT_DEFINITION_URL_TEMPLATE
+         # above. Route existence verified live: GET /artifacts/key-sets/<a
+         # wrong digest> -> 404 "EventKeySet artifact not found", not 500.
+-- 
+2.52.0
+

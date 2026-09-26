@@ -80,13 +80,13 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 
 Pre-existing parts supplied by the team:
 
-- The entire **Beid** attendee-app repository was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
+- The existing attendee app was pre-existing private work in its entirety, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
 - The evidence layer was likewise pre-existing as a whole: the operator service, Sepolia evidence contracts and protocol reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
 Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record.
 
-The app-side typed signing entry point is new hackathon work inside Beid. It becomes open source when the Beid repository is made public; that publication is in preparation. **Public Beid repository link: pending confirmed publication.** The link will be added once publication is confirmed. This README's local checks do not independently verify the app-side integration.
+The existing attendee app remains private. Its complete hackathon-built change is included in the [attendee-app signing patch](docs/process/beid-event-key-signing.patch): the typed event-key signing entry point, its approval sheet and callback handling, and the golden vector tests. The app's pre-existing implementation is not included. See the [patch details and verification](#existing-attendee-app-signing-patch).
 
 Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
 
@@ -95,6 +95,40 @@ Two evaluator files explicitly carry **Ported from the pre-existing evidence-lay
 - [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing evidence-layer protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
 
 The contract also vendors upstream EAS and OpenZeppelin dependencies; versions and commit references are listed in [contracts/README.md](contracts/README.md).
+
+## Existing attendee app signing patch
+
+[Download the patch](docs/process/beid-event-key-signing.patch). It applies to the existing attendee app at parent commit `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1` and contains these six commits, in order, through `a5b6165a09440cc89769d20f8906034666653cb0`:
+
+- `8aa62255` — Add shared codec for event-key signing links
+- `ab55662d` — Let sensing say which event code signs an Event ID
+- `330a2867` — Add iOS handler and confirmation sheet for event-key signing links
+- `25d6015f` — Test the event-key signing handler against the mizar golden vector
+- `b648ecf7` — Import BeidSharedKit in the signing handler and carry its callbacks in Info.plist
+- `a5b6165a` — Point event-key signing callbacks at the alcor and mizar pages
+
+Changed files (10 files; net 1,117 insertions and 2 deletions):
+
+- `ios/Beid/App/BeidApp.swift`
+- `ios/Beid/App/Info.plist`
+- `ios/Beid/EventKeySign/EventKeySignCoordinator.swift`
+- `ios/Beid/EventKeySign/EventKeySignSheet.swift`
+- `ios/Beid/Sensing/ReportSubmissionRuntime.swift`
+- `ios/Beid/Sensing/SensingCoordinator.swift`
+- `ios/BeidTests/EventKeySignCoordinatorTests.swift`
+- `ios/project.yml`
+- `shared/src/commonMain/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequest.kt`
+- `shared/src/commonTest/kotlin/org/levarac/beid/shared/eventkeysign/EventKeySignRequestTest.kt`
+
+From this repository, inspect the patch without applying it:
+
+```sh
+git apply --stat docs/process/beid-event-key-signing.patch
+```
+
+The command lists each commit diff separately, so repeated paths produce 12 entries (1,122 insertions and 7 deletions); the ten-file net change above compares the parent with the final source revision.
+
+A scratch clone at the parent commit accepted all six messages with `git am`; the resulting tree exactly matched the source revision above, including all ten listed files. The patch excludes generated project-file regeneration and release notes. The only private-key literal is a public test fixture derived as SHA-256 of `beid/event-key-sign/v1 golden vector key`, matching the [published golden vector](docs/design/test-vectors/app-signature-v1.json). This packaging check did not rerun app builds, automated tests or a live callback flow.
 
 ## Sepolia deployment
 

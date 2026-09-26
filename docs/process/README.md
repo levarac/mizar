@@ -52,4 +52,8 @@ The planning briefs required a fresh independent review after each round of corr
 | [14 — Submission review](prompts/14-submission-review.md) | Mizar `b0f432e` | Factual claims, reproduction and public-information checks |
 | [15 — Submission corrections](prompts/15-submission-corrections.md) | Mizar `README.md`, `docs/demo/` | Provenance, reproduction and AI-review wording corrections |
 
-The supplied set contains no standalone contract-review prompt or first Alcor-review prompt. This archive does not reconstruct missing instructions. It also does not claim that prompt existence alone proves a review outcome. The app-side typed signing work is described in the [pre-existing-work disclosure](../../README.md#pre-existing-work-and-hackathon-contributions); its source publication is pending.
+The supplied set contains no standalone contract-review prompt or first Alcor-review prompt. This archive does not reconstruct missing instructions. It also does not claim that prompt existence alone proves a review outcome. The app-side typed signing work is described in the [pre-existing-work disclosure](../../README.md#pre-existing-work-and-hackathon-contributions).
+
+## Existing attendee app signing patch
+
+The existing attendee app is pre-existing private work. The [complete hackathon-built patch](beid-event-key-signing.patch) publishes its typed event-key signing entry point, approval sheet, callback handling and golden vector tests. It applies at parent commit `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1`. The [patch record](../../README.md#existing-attendee-app-signing-patch) lists all six commit subjects, the ten changed files and the clean-apply verification. Inspect it from the repository root with `git apply --stat docs/process/beid-event-key-signing.patch`.
