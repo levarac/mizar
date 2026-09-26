@@ -81,15 +81,16 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 Pre-existing parts supplied by the team:
 
 - An attendee app that records and signs BLE proximity observations.
-- An operator service and Sepolia contracts that collect signed observations and anchor ordered commitment digests with observation inclusion proofs. These are separate from the new Mizar claim contract.
+- An operator service and Sepolia contracts that collect signed observations and anchor ordered commitment digests with observation inclusion proofs, plus a protocol reference implementation that derives mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
-Hackathon work includes Mizar's eligibility rule and evaluator, claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record. The app-side typed signing integration is outside these public repositories and is not independently verified by this README's local checks.
+Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record. The app-side typed signing integration is outside these public repositories and is not independently verified by this README's local checks.
 
-Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers:
+Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
 
 - [evaluator/src/codec.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/codec.ts): wire domains and canonical COSE rules.
 - [evaluator/src/evidence.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/evidence.ts): observation, commitment and receipt domains, admission fields and inclusion-tree rules.
+- [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing evidence-layer protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
 
 The contract also vendors upstream EAS and OpenZeppelin dependencies; versions and commit references are listed in [contracts/README.md](contracts/README.md).
 
