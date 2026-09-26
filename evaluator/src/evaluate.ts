@@ -34,10 +34,12 @@ export interface Evaluation {
 const byAddress = (a: string, b: string) => a.toLowerCase().localeCompare(b.toLowerCase());
 const keyOf = (pub: string) => pub.toLowerCase().replace(/^0x/, "");
 const addrKey = (addr: string) => addr.toLowerCase();
+// Keys are ordered by UTF-16 code units, which is what the Alcor worker's plain
+// Array.prototype.sort() produces for the signed credential JSON.
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
   if (value && typeof value === "object")
-    return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+    return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
       .map(([key, field]) => `${JSON.stringify(key)}:${canonical(field)}`).join(",")}}`;
   return JSON.stringify(value);
 }
@@ -76,7 +78,7 @@ export function verifyCredentials(list: CredentialList, params: Parameters) {
         throw new Error("invalid_binding_signature");
       valid.push(item);
     } catch (error) {
-      invalid.push({ address: item.eventKeyAddress,
+      invalid.push({ address: String((item as Partial<Credential> | null)?.eventKeyAddress ?? ""),
         reason: error instanceof Error ? error.message : String(error) });
     }
   }
@@ -95,6 +97,11 @@ export function verifyCredentials(list: CredentialList, params: Parameters) {
   }
   return { accepted, invalid };
 }
+// The mutual-pair definition (group by eventId, definitionDigest and enin; union the
+// RPIDs each reporter RPID heard; keep A-B only when each heard the other) follows the
+// pre-existing evidence-layer protocol reference's relation derivation. The RPID
+// conflict filter, per-key-pair window accumulation, thresholds and credential
+// requirement are new in Mizar.
 export function deriveRelations(observations: Observation[]) {
   const groups = new Map<string, Map<string, Set<string>>>();
   const claims = new Map<string, Set<string>>();

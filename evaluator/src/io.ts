@@ -3,6 +3,9 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
 import type { Envelope } from "./evidence.js";
 
+// A source the verifier chose (RPC, trusted parameters or list, the manifest itself)
+// could not be read. Only this maps to UNAVAILABLE; archive content never does.
+export class UnavailableError extends Error {}
 export const digestBytes = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 export const sourcePath = (source: string, base: string) =>
   /^https:\/\//.test(source) ? source : base.startsWith("https://") ? new URL(source, base).toString()

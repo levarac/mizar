@@ -1,0 +1,67 @@
+:root {
+  color: #1c1915;
+  background: #f4efe6;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", serif;
+  line-height: 1.45;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 4rem;
+}
+
+h1 {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+section {
+  margin-top: 1.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d9d0c3;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid #b7ab9c;
+  background: #fffdf8;
+}
+
+button {
+  margin-top: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #1c1915;
+  background: #1c1915;
+  color: #f4efe6;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#recipient-grouped {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  word-break: break-all;
+}
+
+#error,
+#status.error {
+  color: #8d1d1d;
+}

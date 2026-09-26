@@ -40,12 +40,72 @@ returns `UNAVAILABLE` and does not settle a root. It archives the fetched
 inputs and derived mapping under the output directory for offline replay.
 
 `verify` recomputes the root and the sorted eligibility, rejection, and proof
-outputs from the archived inputs. Without `--rpc` it compares with the
-manifest root. With both `--rpc` and `--contract` it also checks the claim
-contract's `RootPosted` event, including its root, cutoff block, and SHA-256
-of the exact written manifest bytes. For a live-origin manifest it rechecks
-the registry mappings. The contract's snapshots are private, so the event is
-the public read surface.
+outputs from the archived inputs. Observation bytes that do not hash to their
+committed digest make the archive invalid (`invalid_signature`). Without
+`--rpc` it compares with the manifest root only; every input, including the
+parameters, the anchor-to-block sidecar and the credential list, is then taken
+from the archive as the poster wrote it. With `--rpc` and `--contract` it checks
+the snapshot against sources the verifier chooses:
+
+```sh
+pnpm mizar verify --manifest dir/manifest.json --rpc <url> --contract <claim> \
+  --trusted-params <published params.json> [--trusted-params-sha256 <hex>] \
+  --chain-id 11155111 [--from-block <n>] \
+  --event-registry <addr> --definition-registry <addr> --commitment-registry <addr> \
+  [--credentials-source <Alcor list URL or file>]
+```
+
+The parameters file inside the archive is written by the poster, so every
+trust anchor comes from these flags instead. This repository does not pin the
+evidence layer's Sepolia registry addresses, so without the flags an on-chain
+verify returns `UNAVAILABLE`.
+
+- `inputs/params.json` in the archive is written by the poster and is never a
+  trust anchor. `--trusted-params` must be the parameters file published before
+  the snapshot, obtained from outside the archive; a path or URL inside the
+  manifest's directory is refused with `UNAVAILABLE`. **Pending:** where the
+  organizer publishes these parameters, and a poster-independent digest to pin
+  them, are not decided yet. Until then `--trusted-params-sha256` lets the
+  verifier check its copy against a digest obtained out of band; a mismatch is
+  `UNAVAILABLE`, because it means the verifier's own copy is wrong.
+- The trusted parameters' `chainId` must equal `--chain-id`, or the result is
+  `UNAVAILABLE`. Their
+  `evaluatorVersion`, `eventId`, `chainId`, `minPartners`,
+  `minWindowsPerPartner`, `credentialsPublicKey`, `snapshot.id` and
+  `snapshot.cutoffBlock` must equal the archived parameters; a difference is a
+  `FAIL`, a missing field is `UNAVAILABLE`.
+- Registry addresses in the archived parameters are cross-checked against the
+  registry flags; a difference is a `FAIL`. An RPC serving another chain is
+  `UNAVAILABLE`.
+- The credential list is re-read from `--credentials-source`, or from the
+  trusted parameters' `credentialsSource`. Every entry that verifies and was
+  verified by the cutoff must be in the archived list; an omission is a `FAIL`,
+  an unreachable list is `UNAVAILABLE`. The list only grows, so later entries
+  are ignored.
+- Commitment logs count only when their recorder is the operator registered for
+  the event. This assumes the registry records each event's commitments from
+  that operator alone; logs from any other recorder are ignored.
+- The event registration must match, and the admission must carry the latest
+  definition anchored by the cutoff. Every commitment is mapped to its registry
+  block, every commitment anchored at or before the cutoff must be in the
+  inputs, and the cutoff block timestamp must match.
+- Finally the claim contract's `RootPosted` event must match the root, the
+  cutoff block, and the SHA-256 of the exact written manifest bytes. The
+  contract's snapshots are private, so the event is the public read surface.
+
+Log reads start at `--from-block` (a trusted lower bound such as the registry
+deployment block; default 0). A range the RPC rejects as too wide or too large
+is split in half down to 100 blocks; any other RPC error, or more than 500
+`eth_getLogs` calls, is `UNAVAILABLE`. Only failures of sources the verifier
+chose (the manifest fetch, the RPC, the trusted parameters and credential list)
+are `UNAVAILABLE`. Archive content is the poster's responsibility: a missing or
+unparsable input or output file is a `FAIL`, and output files are read only
+after the root and on-chain checks. None of this has been run against a live
+Sepolia RPC; the suite uses a local JSON-RPC stub.
+
+Future work: the credential omission check trusts whatever list the verifier
+fetches. A list head signed by Alcor (entry count plus digest per cutoff) would
+let an archive prove completeness on its own.
 
 The public verification-envelope API currently returns `bundle: null`. It
 cannot expose bundled delegation certificates or support recomputation of the
