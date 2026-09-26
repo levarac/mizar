@@ -53,8 +53,11 @@ The exporter calls `verifyEvidence`, `verifyCredentials`, `deriveRelations`
 and `evaluateRule`; the browser does not implement the rule. All credentials
 are fixed at the snapshot cutoff. Each replay frame evaluates the verified
 observation prefix through that window index, including the evaluator's RPID
-conflict filtering. Relations and status can therefore change when later
-conflicting observations arrive. Empty windows between the first and last
+conflict filtering. Relations and counters can therefore change when later
+conflicting observations arrive. PASS is shown only if a key meets the rule
+in both the replay prefix and the final snapshot: a later conflict cannot
+produce an earlier false PASS. Other unfinished keys remain PENDING in the
+page until replay completes. Empty windows between the first and last
 observations are retained. Export is bounded to 4,096 slots. The displayed
 300-second window length is the protocol's documented default, not a timestamp
 inferred from fixture window indices. No wall-clock event time is invented.
@@ -80,8 +83,12 @@ separate, ephemeral Chrome profile, with no account login or existing tabs.
 
 ```sh
 node_modules/.bin/playwright test
-node capture.mjs /private/tmp/graph-viz-out
+node capture.mjs
 ```
+
+Capture defaults to `join(os.tmpdir(), 'graph-viz-out')`, using the system's
+temporary directory on every platform. Pass an output directory as the first
+argument to override it, for example `node capture.mjs ./recording`.
 
 Capture runs the actual Play control and takes three 1920×1080 stills from
 slots 0, 1 and 2. ffmpeg holds those frames for 6.5, 6.5 and 8 seconds to make
