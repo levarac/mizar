@@ -1,3 +1,4 @@
+import "./preview.css";
 import eligible from "./fixtures/evaluator/eligible.json";
 import paramsBytes from "./fixtures/params.json?raw";
 import deployment from "../public/claim-config.json";

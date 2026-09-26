@@ -97,6 +97,7 @@ const element = <T extends HTMLElement = HTMLElement>(id: string) =>
   document.getElementById(id) as T;
 export function showRuleError(): void {
   element("rules-status").textContent = "Parameters could not be verified";
+  element("rules-status").classList.remove("verified");
   element("rules-status").classList.add("error");
   element("rules-content").hidden = true;
   element("rules-error").hidden = false;
@@ -106,6 +107,7 @@ export function showRuleError(): void {
 export function renderRules(params: Parameters, config: RuleConfig): void {
   element("rules-status").textContent = "Verified parameters · N, B & issuer";
   element("rules-status").classList.remove("error");
+  element("rules-status").classList.add("verified");
   element("rules-content").hidden = false;
   element("rules-error").hidden = true;
   element("rule-n").textContent = String(params.minPartners);

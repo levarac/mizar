@@ -459,31 +459,6 @@ footer {
 footer a {
   font-size: 16px;
 }
-#preview-bar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 8px 56px;
-  background: #111;
-  color: #fff;
-  font-size: 14px;
-}
-#preview-bar strong {
-  letter-spacing: 0.03em;
-  margin-right: auto;
-}
-#preview-bar label {
-  font-size: 14px;
-}
-#preview-state {
-  font-size: 14px;
-  max-width: 270px;
-  border: 1px solid #777;
-  background: #111;
-  color: #fff;
-  padding: 4px 8px;
-  border-radius: 0;
-}
 @media (min-width: 1500px) {
   .workspace {
     grid-template-columns: minmax(0, 1.25fr) minmax(540px, 1fr);
@@ -540,9 +515,6 @@ footer a {
   }
   .state-body {
     min-height: 380px;
-  }
-  #preview-bar {
-    padding: 9px 24px;
   }
   h1 {
     font-size: 48px;
@@ -694,23 +666,6 @@ footer a {
     display: block;
     font-size: 16px;
     margin-top: 12px;
-  }
-  #preview-bar {
-    padding: 9px 20px;
-    flex-wrap: wrap;
-    gap: 6px 10px;
-  }
-  #preview-bar strong {
-    flex-basis: 100%;
-    font-size: 14px;
-  }
-  #preview-state {
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-  }
-  #preview-bar label {
-    font-size: 14px;
   }
 }
 @media (prefers-reduced-motion: no-preference) {
@@ -893,7 +848,8 @@ h2 {
   gap: 12px;
 }
 .result-chip,
-.verification::before {
+.verification.verified::before,
+.verification.error::before {
   background: #014efe;
   color: #fff;
   padding: 3px 7px;
@@ -906,11 +862,14 @@ h2 {
 .verification.error::before {
   background: #b93816;
 }
-.verification::before {
-  content: "PASS";
+.verification.verified::before,
+.verification.error::before {
   width: auto;
   height: auto;
   margin-right: 10px;
+}
+.verification.verified::before {
+  content: "PASS";
 }
 .verification.error::before {
   content: "FAIL";
