@@ -83,6 +83,14 @@ describe("fixture evidence and evaluation", () => {
     expect(() => verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, {}))
       .toThrow("missing trusted anchor block mapping");
   });
+  it("fails on Observation bytes that differ from the committed digest", () => {
+    const [corrupt] = structuredClone(pages);
+    const bytes = Buffer.from(corrupt.observations[0].signedObservation, "base64");
+    bytes[bytes.length - 1] ^= 1;
+    corrupt.observations[0].signedObservation = bytes.toString("base64");
+    expect(() => verifyEvidence([corrupt], params.eventId, params.snapshot.cutoffBlock, anchors))
+      .toThrow("Observation digest mismatch against commitment");
+  });
   it("checks the commitment chain on a single page", () => {
     const [original] = structuredClone(pages);
     const broken = structuredClone(original);
@@ -279,6 +287,20 @@ describe("CLI receipt", () => {
       expect(resealed.status).toBe(1);
       expect(resealed.stdout).toContain('"fault":"invalid_signature"');
       expect(resealed.stdout).toContain("verification failures differ from the manifest");
+      // A re-sealed change to committed Observation bytes is fatal, not a dropped observation.
+      const envelopePath = join(out, "inputs/envelopes.json");
+      const archived = JSON.parse(readFileSync(envelopePath, "utf8")) as Envelope[];
+      const observation = Buffer.from(archived[0].observations[0].signedObservation, "base64");
+      observation[observation.length - 1] ^= 1;
+      archived[0].observations[0].signedObservation = observation.toString("base64");
+      const envelopeBytes = Buffer.from(JSON.stringify(archived, null, 2) + "\n");
+      writeFileSync(envelopePath, envelopeBytes);
+      manifest.inputs.envelopes.sha256 = hex(sha(envelopeBytes));
+      writeFileSync(manifestPath, JSON.stringify(manifest));
+      const corrupted = run("verify", "--manifest", manifestPath);
+      expect(corrupted.status).toBe(1);
+      expect(corrupted.stdout).toContain('"fault":"invalid_signature"');
+      expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 30_000);
   it("checks RootPosted and registry anchors against a fixture JSON-RPC stub", async () => {

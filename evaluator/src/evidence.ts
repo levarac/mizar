@@ -254,8 +254,11 @@ export function verifyEvidence(pages: Envelope[], eventId: string, cutoffBlock: 
         const declared = ordered[i], signedObservation = signedObservations[i];
         if (seen.has(declared)) throw new Error("duplicate Observation digest");
         seen.add(declared); inputDigests.push(declared);
+        // Bytes that do not hash to the operator-committed digest are not the committed
+        // Observation, so the input is corrupt rather than one droppable observation.
+        if (observationDigest(signedObservation) !== declared)
+          throw new Error("Observation digest mismatch against commitment");
         try {
-          if (observationDigest(signedObservation) !== declared) throw new Error("observation_digest_mismatch");
           const raw = map(decode(cosePayload(signedObservation)), [1, 2, 3, 4, 5, 6, 7, 8]);
           const observer = bytes(raw.get(5), 33);
           coseVerify(signedObservation, observer, media.observation);
