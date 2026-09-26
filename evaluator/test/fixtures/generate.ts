@@ -1,7 +1,7 @@
 // Deterministic TEST VECTORS ONLY. Every private key is SHA-256 of a published label.
 // These keys must never hold funds or be used outside fixtures.
-import { writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { ed25519 } from "@noble/curves/ed25519.js";
@@ -12,6 +12,11 @@ import { commitmentDigest, definitionDigest, evidenceRoot, inclusionPath, keySet
   observationDigest, operatorId } from "../../src/evidence.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
+const comparison = process.argv.includes("--comparison");
+const outputIndex = process.argv.indexOf("--out");
+if (outputIndex !== -1 && !process.argv[outputIndex + 1]) throw new Error("--out requires a directory");
+const output = outputIndex !== -1 ? resolve(process.argv[outputIndex + 1])
+  : comparison ? join(here, "comparison") : here;
 const key = (label: string) => sha(Buffer.from("Mizar public deterministic TEST KEY: " + label));
 const pub = (label: string) => Buffer.from(secp256k1.getPublicKey(key(label), true));
 const hex0 = (b: Uint8Array) => "0x" + hex(b);
@@ -44,7 +49,6 @@ const defDigest = Buffer.from(definitionDigest(signedDefinition), "hex");
 const rpid = (label: string, window: number) =>
   Buffer.concat([Buffer.from([1]), sha(Buffer.from(`Mizar fixture RPID: ${label}:${window}`)).subarray(0, 16)]);
 const names = ["A", "B", "C", "M1", "M2", "M3"] as const;
-type Name = typeof names[number];
 function observation(label: string, window: number, own: Buffer, heard: Buffer[], salt = ""): Buffer {
   const payload = encode(new Map<number, unknown>([
     [1, defDigest], [2, window], [3, heard.sort(Buffer.compare)],
@@ -60,15 +64,19 @@ function observation(label: string, window: number, own: Buffer, heard: Buffer[]
 const signed: Buffer[] = [];
 for (const window of [1, 2]) {
   for (const label of names) {
-    const heard = names.filter(other => other !== label).map(other => rpid(other, window));
+    const heard = names.filter(other => other !== label &&
+      (!comparison || other.startsWith("M") === label.startsWith("M")))
+      .map(other => rpid(other, window));
     signed.push(observation(label, window, rpid(label, window), heard));
   }
 }
-signed.push(observation("C", 99, rpid("C", 99), []));
-signed.push(observation("S", 99, rpid("C", 99), [])); // RPID squatter
-const tampered = observation("T", 100, rpid("T", 100), []);
-tampered[tampered.length - 1] ^= 1; // valid CBOR and inclusion, invalid ES256K signature
-signed.push(tampered);
+if (!comparison) {
+  signed.push(observation("C", 99, rpid("C", 99), []));
+  signed.push(observation("S", 99, rpid("C", 99), [])); // RPID squatter
+  const tampered = observation("T", 100, rpid("T", 100), []);
+  tampered[tampered.length - 1] ^= 1; // valid CBOR and inclusion, invalid ES256K signature
+  signed.push(tampered);
+}
 const ordered = signed.map(b => ({ bytes: b, digest: observationDigest(b) }))
   .sort((a, b) => a.digest.localeCompare(b.digest));
 const digests = ordered.map(x => x.digest);
@@ -135,14 +143,21 @@ const credentials = participants.map((label, i) => {
     algorithm: "Ed25519" as const, publicKey: credentialsPublicKey,
     signature: hex0(ed25519.sign(message, attestationSeed)),
   } };
-});
+}).filter((_, i) => !comparison || ![4, 5].includes(i));
 const params = {
   evaluatorVersion: "mizar-eval/1", eventId: hex0(eventId), chainId: 11155111,
   minPartners: 2, minWindowsPerPartner: 2,
   credentialsPublicKey,
   evidenceSource: "envelopes.json", credentialsSource: "credentials.json",
   anchorBlocksSource: "anchor-blocks.json",
-  pendingSource: "pending.json",
+  ...(!comparison ? { pendingSource: "pending.json" } : { comparison: {
+    provenance: "recorded-synthetic",
+    cases: [
+      { label: "Honest attendees", addresses: ["A", "B", "C"].map(label => eventKeyAddress(pub(label))) },
+      { label: "Mallory: one human, three phones", addresses: ["M1", "M2", "M3"].map(label => eventKeyAddress(pub(label))) },
+      { label: "Walk-in: credential, no encounters", addresses: [eventKeyAddress(pub("D"))] },
+    ],
+  } }),
   snapshot: { id: 1, cutoffBlock: 100, cutoffTimestamp: from + 10_001 },
 };
 const threeAddresses = ["A", "B", "C"].map(label => eventKeyAddress(pub(label)))
@@ -153,12 +168,14 @@ const threeAddressVector = {
   addresses: threeAddresses, root: threeTree.root,
   proofs: Object.fromEntries(threeAddresses.map((address, i) => [address, threeTree.getProof(i)])),
 };
+mkdirSync(output, { recursive: true });
 for (const [name, value] of Object.entries({
   "envelopes.json": [envelope], "credentials.json": { eventId: params.eventId, credentials },
   "anchor-blocks.json": { [commitmentHash]: 90 }, "params.json": params,
-  "pending.json": { kind: "synthetic-pending-fixture", eventId: params.eventId,
+  ...(!comparison ? { "pending.json": { kind: "synthetic-pending-fixture", eventId: params.eventId,
     evidenceSource: "envelopes.json", anchorBlocksSource: "anchor-blocks.json" },
-  "merkle-3-address.json": threeAddressVector,
-})) writeFileSync(join(here, name), JSON.stringify(value, null, 2) + "\n");
-console.log(JSON.stringify({ fixture: here, observations: ordered.length, credentials: credentials.length,
+  "merkle-3-address.json": threeAddressVector } : {}),
+})) writeFileSync(join(output, name), JSON.stringify(value, null, 2) + "\n");
+console.log(JSON.stringify({ fixture: output, ...(comparison ? { provenance: "recorded-synthetic" } : {}),
+  observations: ordered.length, credentials: credentials.length,
   eventId: params.eventId, commitment: commitmentHash }));
