@@ -78,7 +78,7 @@ export function verifyCredentials(list: CredentialList, params: Parameters) {
         throw new Error("invalid_binding_signature");
       valid.push(item);
     } catch (error) {
-      invalid.push({ address: item.eventKeyAddress,
+      invalid.push({ address: String((item as Partial<Credential> | null)?.eventKeyAddress ?? ""),
         reason: error instanceof Error ? error.message : String(error) });
     }
   }
