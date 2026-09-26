@@ -3,7 +3,7 @@
 ## Try it
 
 - **Demo video:** pending; the link will be added here.
-- **Human check (join page):** [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/). The full flow needs the Beid app, which signs the check with its event key; Beid is distributed to the demo devices through TestFlight and its [source is public](https://github.com/levarac/beid).
+- **Human check (join page):** [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/). The full flow needs the Beid app, which signs the check with its event key: [install the ETHGlobal Tokyo demo build of Beid (iOS) through TestFlight](https://testflight.apple.com/join/2DNXhfTR). Its [source is public](https://github.com/levarac/beid).
 - **Claim contract on Sepolia:** [MizarClaim on Etherscan](https://sepolia.etherscan.io/address/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC), with [verified source on Sourcify](https://repo.sourcify.dev/11155111/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC) (exact match).
 - **EAS schema:** [0x858edbff…65d3 on EASScan](https://sepolia.easscan.org/schema/view/0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3).
 - **Run it locally in one command:** from `e2e/`, `pnpm install --frozen-lockfile && pnpm e2e` evaluates the fixture, posts a root on a local chain and claims (see [Local E2E](#local-e2e-fixture-only-anvil-and-mockeas)).
