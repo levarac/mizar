@@ -1,0 +1,106 @@
+From ca44fb4486f66cfe2064cb50ceb81c932317754e Mon Sep 17 00:00:00 2001
+From: NAOE Kenichi <ken@naoe.tokyo>
+Date: Sat, 26 Sep 2026 03:08:24 +0900
+Subject: [PATCH] Enable two-iPhone Observation demo in Release
+
+---
+ ios/Beid.xcodeproj/project.pbxproj           | 4 +++-
+ ios/Beid/Models/BeidConfig.swift             | 9 +++++++--
+ ios/BeidTests/BeidConfigThresholdTests.swift | 6 +++++-
+ ios/Lab/Info.plist                           | 4 ++--
+ ios/project.yml                              | 9 +++++++++
+ 5 files changed, 26 insertions(+), 6 deletions(-)
+
+diff --git a/ios/Beid.xcodeproj/project.pbxproj b/ios/Beid.xcodeproj/project.pbxproj
+index 80117011..139b0218 100644
+--- a/ios/Beid.xcodeproj/project.pbxproj
++++ b/ios/Beid.xcodeproj/project.pbxproj
+@@ -1697,2 +1697,3 @@
+ 				SDKROOT = iphoneos;
++				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BEID_TWO_IPHONE_DEMO";
+ 				SWIFT_VERSION = 5.0;
+@@ -1848,3 +1849,3 @@
+ 				BEID_EVENT_REGISTRY_READER_ADDRESS = 0xd4852f8526A1555A1b2C34145f0eCDA412a53c51;
+-				BEID_REPORT_SUBMISSION_ENABLED = NO;
++				BEID_REPORT_SUBMISSION_ENABLED = YES;
+ 				BEID_VENUE_BUNDLE_URL_TEMPLATE = "";
+@@ -1872,2 +1873,3 @@
+ 				SDKROOT = iphoneos;
++				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) BEID_TWO_IPHONE_DEMO";
+ 				SWIFT_EMIT_LOC_STRINGS = YES;
+diff --git a/ios/Beid/Models/BeidConfig.swift b/ios/Beid/Models/BeidConfig.swift
+index b4351062..8ac03549 100644
+--- a/ios/Beid/Models/BeidConfig.swift
++++ b/ios/Beid/Models/BeidConfig.swift
+@@ -25,3 +25,3 @@ enum BeidConfig {
+   ///
+-  /// The base value (`3`) now comes from
++  /// The normal base value (`3`) comes from
+   /// `BeidSharedKit.sensing.defaultEventConfirmThreshold` (beid#231 item 3) —
+@@ -29,3 +29,4 @@ enum BeidConfig {
+   /// settle. This property still owns the DEBUG-only overrides below, which
+-  /// wrap the shared value rather than replace it.
++  /// wrap the shared value rather than replace it. The Release-only
++  /// `BEID_TWO_IPHONE_DEMO` configuration uses one peer on this demo branch.
+   #if DEBUG
+@@ -56,3 +57,7 @@ enum BeidConfig {
+     #endif
++    #if BEID_TWO_IPHONE_DEMO
++    return 1
++    #else
+     return Int(BeidSharedKit.sensing.defaultEventConfirmThreshold)
++    #endif
+   }
+diff --git a/ios/BeidTests/BeidConfigThresholdTests.swift b/ios/BeidTests/BeidConfigThresholdTests.swift
+index cb431e5b..59cf82b2 100644
+--- a/ios/BeidTests/BeidConfigThresholdTests.swift
++++ b/ios/BeidTests/BeidConfigThresholdTests.swift
+@@ -19,4 +19,8 @@ import XCTest
+ final class BeidConfigThresholdTests: XCTestCase {
+-  func testEventConfirmThresholdIsThree() {
++  func testEventConfirmThresholdMatchesBuildPolicy() {
++    #if BEID_TWO_IPHONE_DEMO
++    XCTAssertEqual(BeidConfig.eventConfirmThreshold, 1)
++    #else
+     XCTAssertEqual(BeidConfig.eventConfirmThreshold, 3)
++    #endif
+   }
+diff --git a/ios/Lab/Info.plist b/ios/Lab/Info.plist
+index c49eba1d..946f7115 100644
+--- a/ios/Lab/Info.plist
++++ b/ios/Lab/Info.plist
+@@ -4,2 +4,4 @@
+ <dict>
++	<key>BeidReportSubmissionEnabled</key>
++	<string>$(BEID_REPORT_SUBMISSION_ENABLED)</string>
+ 	<key>CFBundleDevelopmentRegion</key>
+@@ -20,4 +22,2 @@
+ 	<string>$(CURRENT_PROJECT_VERSION)</string>
+-	<key>BeidReportSubmissionEnabled</key>
+-	<string>$(BEID_REPORT_SUBMISSION_ENABLED)</string>
+ 	<key>NSBluetoothAlwaysUsageDescription</key>
+diff --git a/ios/project.yml b/ios/project.yml
+index 8c811285..6af6477f 100644
+--- a/ios/project.yml
++++ b/ios/project.yml
+@@ -146,2 +146,7 @@ targets:
+         Release:
++          # Demo branch only: two iPhones can confirm with one nearby peer
++          # and submit ObservationV1. Do not merge into main without the
++          # App Store privacy-label review in docs/app-store/privacy-labels.md.
++          BEID_REPORT_SUBMISSION_ENABLED: "YES"
++          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_TWO_IPHONE_DEMO"
+           # Runner-only indirection: empty under Xcode Cloud, explicit in GHA.
+@@ -191,2 +196,3 @@ targets:
+         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
++        BeidReportSubmissionEnabled: "$(BEID_REPORT_SUBMISSION_ENABLED)"
+         NSBluetoothAlwaysUsageDescription: "beid Lab uses Bluetooth for the device harness."
+@@ -239,2 +245,5 @@ targets:
+         GENERATE_INFOPLIST_FILE: YES
++      configs:
++        Release:
++          SWIFT_ACTIVE_COMPILATION_CONDITIONS: "$(inherited) BEID_TWO_IPHONE_DEMO"
+   BeidUITests:
+-- 
+2.52.0
+

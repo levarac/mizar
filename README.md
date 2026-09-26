@@ -80,13 +80,15 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 
 Pre-existing parts supplied by the team:
 
-- The existing attendee app was pre-existing private work in its entirety, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
+- The existing attendee app, including its UI design work, was pre-existing private work apart from the changes below. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
 - The evidence layer was likewise pre-existing as a whole: the operator service, Sepolia evidence contracts and protocol reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
 Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record.
 
-The existing attendee app remains private. Its complete hackathon-built change is included in the [attendee-app signing patch](docs/process/beid-event-key-signing.patch): the typed event-key signing entry point, its approval sheet and callback handling, and the golden vector tests. The app's pre-existing implementation is not included. See the [patch details and verification](#existing-attendee-app-signing-patch).
+The existing attendee app remains private. The patches below publish its hackathon-period [event-key signing changes](docs/process/beid-event-key-signing.patch) and [two-iPhone demo configuration](docs/process/beid-demo-config.patch). The signing changes include the typed entry point, its approval sheet and callback handling, and the golden vector tests. The app's pre-existing implementation is not included. See the [patch details and verification](#existing-attendee-app-patches).
+
+Three release-maintenance commits on the app's main branch also landed during the event: `0da68a4d` (observation submission enabled), `a3ba37ef` (store privacy answers and review notes), and `50dc5be5` (test notes); they are not included because they are store-release configuration, not the signing feature.
 
 Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
 
@@ -96,9 +98,13 @@ Two evaluator files explicitly carry **Ported from the pre-existing evidence-lay
 
 The contract also vendors upstream EAS and OpenZeppelin dependencies; versions and commit references are listed in [contracts/README.md](contracts/README.md).
 
-## Existing attendee app signing patch
+## Existing attendee app patches
 
-[Download the patch](docs/process/beid-event-key-signing.patch). It applies to the existing attendee app at parent commit `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1` and contains these six commits, in order, through `a5b6165a09440cc89769d20f8906034666653cb0`:
+Each patch applies independently at its stated parent. The demo configuration commit is already an ancestor of the signing patch's parent.
+
+### Event-key signing
+
+[Download the patch](docs/process/beid-event-key-signing.patch). It applies to the existing attendee app at parent commit `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1` and contains these six commits, in order, through `a5b6165a09440cc89769d20f8906034666653cb0`. Its parent is a **2026-09-26 merge** of the app's main branch into the demo branch, **not a pre-start snapshot**:
 
 - `8aa62255` — Add shared codec for event-key signing links
 - `ab55662d` — Let sensing say which event code signs an Event ID
@@ -128,7 +134,27 @@ git apply --stat docs/process/beid-event-key-signing.patch
 
 The command lists each commit diff separately, so repeated paths produce 12 entries (1,122 insertions and 7 deletions); the ten-file net change above compares the parent with the final source revision.
 
-A scratch clone at the parent commit accepted all six messages with `git am`; the resulting tree exactly matched the source revision above, including all ten listed files. The patch excludes generated project-file regeneration and release notes. The only private-key literal is a public test fixture derived as SHA-256 of `beid/event-key-sign/v1 golden vector key`, matching the [published golden vector](docs/design/test-vectors/app-signature-v1.json). This packaging check did not rerun app builds, automated tests or a live callback flow.
+A scratch clone at the parent commit accepted all six messages with `git am`; the resulting tree exactly matched the source revision above, including all ten listed files. The signing patch excludes the later generated project-file regeneration and release notes. The only private-key literal is a public test fixture derived as SHA-256 of `beid/event-key-sign/v1 golden vector key`, matching the [published golden vector](docs/design/test-vectors/app-signature-v1.json). This packaging check did not rerun app builds, automated tests or a live callback flow.
+
+### Two-iPhone demo configuration
+
+[Download the demo configuration patch](docs/process/beid-demo-config.patch). It applies at parent commit `047fa4e7b7e9b5a3fbf11b65d871a4e7b0fd263d` and contains:
+
+- `ca44fb44` — Enable two-iPhone Observation demo in Release
+
+This 2026-09-26 change enables a one-peer confirmation threshold and observation submission for the Release demo, with a matching threshold test and generated project settings. Changed files (5 files; 26 insertions and 6 deletions):
+
+- `ios/Beid.xcodeproj/project.pbxproj`
+- `ios/Beid/Models/BeidConfig.swift`
+- `ios/BeidTests/BeidConfigThresholdTests.swift`
+- `ios/Lab/Info.plist`
+- `ios/project.yml`
+
+```sh
+git apply --stat docs/process/beid-demo-config.patch
+```
+
+The patch was exported with one line of context to omit unrelated signing settings; every added and deleted line is preserved. In a separate scratch clone at its parent, `git am` applied the patch and the resulting tree exactly matched `ca44fb4486f66cfe2064cb50ceb81c932317754e`. No app build, automated app test or two-device demonstration was rerun for this packaging check.
 
 ## Sepolia deployment
 

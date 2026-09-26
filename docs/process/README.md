@@ -54,6 +54,20 @@ The planning briefs required a fresh independent review after each round of corr
 
 The supplied set contains no standalone contract-review prompt or first Alcor-review prompt. This archive does not reconstruct missing instructions. It also does not claim that prompt existence alone proves a review outcome. The app-side typed signing work is described in the [pre-existing-work disclosure](../../README.md#pre-existing-work-and-hackathon-contributions).
 
-## Existing attendee app signing patch
+## Existing attendee app patches
 
-The existing attendee app is pre-existing private work. The [complete hackathon-built patch](beid-event-key-signing.patch) publishes its typed event-key signing entry point, approval sheet, callback handling and golden vector tests. It applies at parent commit `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1`. The [patch record](../../README.md#existing-attendee-app-signing-patch) lists all six commit subjects, the ten changed files and the clean-apply verification. Inspect it from the repository root with `git apply --stat docs/process/beid-event-key-signing.patch`.
+The existing attendee app is pre-existing private work apart from the hackathon-period changes below:
+
+- [Event-key signing patch](beid-event-key-signing.patch): six commits from `8aa62255` through `a5b6165a`, applying at parent `fb144d4d86b5d6447ad8ba1ff630d002ca0b74d1`. They add the typed signing entry point, approval sheet, callback handling and golden vector tests. The [signing record](../../README.md#event-key-signing) lists all six commit subjects and ten files. This parent is a **2026-09-26 merge**, **not a pre-start snapshot**.
+- [Two-iPhone demo configuration patch](beid-demo-config.patch): `ca44fb44` — Enable two-iPhone Observation demo in Release, applying at parent `047fa4e7b7e9b5a3fbf11b65d871a4e7b0fd263d`. The [demo record](../../README.md#two-iphone-demo-configuration) lists its five files and verification.
+
+Three release-maintenance commits on the app's main branch also landed during the event: `0da68a4d` (observation submission enabled), `a3ba37ef` (store privacy answers and review notes), and `50dc5be5` (test notes); they are not included because they are store-release configuration, not the signing feature.
+
+Each patch applies at its own parent; the demo configuration is already in the signing patch's ancestry. Inspect both from the repository root without applying them:
+
+```sh
+git apply --stat docs/process/beid-event-key-signing.patch
+git apply --stat docs/process/beid-demo-config.patch
+```
+
+Both patches were applied in separate scratch clones, with each resulting tree equal to its source revision. These packaging checks did not rerun app builds, automated app tests or live device flows.
