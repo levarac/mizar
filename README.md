@@ -13,7 +13,7 @@ Built for ETHGlobal Tokyo 2026. Hacking started **2026-09-25 21:00 JST**; the su
 3. **Apply a fixed rule.** An observation pair counts only when both devices report each other's rotating identifiers in the same event, definition and time window. Identifiers claimed by multiple signing keys are dropped. Key pairs accumulate distinct windows; each eligible key needs N credentialed partners with at least B windows **per partner**. The fixture uses N = 2 and B = 2. There is no iterative removal of partners.
 4. **Publish a snapshot.** The evaluator writes `manifest.json`, `eligible.json`, `rejected.json` and `proofs/<lowercase-address>.json`. Leaves contain event-key addresses. The configured root poster can post a snapshot root, the SHA-256 digest of the exact manifest bytes and a cutoff block to the claim contract.
 5. **Claim individually.** The claim page asks for a recipient wallet and obtains a typed app signature bound to the event, chain, contract and recipient. The contract verifies membership and the signature, permits one claim per event key across snapshots, and calls EAS to issue a non-revocable attestation. Eligibility is batched into a root; each claim is a separate transaction.
-6. **Recompute publicly.** Anyone with the published inputs can rerun the evaluator. Offline verification compares against the archived manifest. Chain verification additionally needs independently chosen chain and registry addresses, and checks the `RootPosted` event against the recomputed result.
+6. **Recompute publicly.** Anyone with the published inputs can rerun the evaluator. Offline verification compares against the archived manifest. Chain verification additionally needs independently chosen chain and registry addresses, pre-snapshot parameters obtained outside the archive, and an Alcor credential source. It checks those sources and the `RootPosted` event against the recomputed result.
 
 ### What the result does and does not establish
 
@@ -25,12 +25,12 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code; the branch column identifies work that may still be awaiting integration. The commands below require the listed component's source checkout, not just this documentation branch.
+Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code. The evaluator is now integrated into Mizar `main` at `787e9b6` and included in this branch. The E2E runner still requires its separate branch checkout; Alcor is a separate repository.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
 | Claim contract | [contracts/](https://github.com/levarac/mizar/tree/b755abcbdcf7bf61a1ee7f8f93b07695fd1317f7/contracts) | `b755abc`, `main` | Snapshot roots, event-key authorization, one-time claims and EAS issuance |
-| Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator) | `eae54bc`, `feat/evaluator` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
+| Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator) | `787e9b6`, `main`; integrated from `feat/evaluator` at `a7a94a3` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
 | Claim page | [web/](https://github.com/levarac/mizar/tree/68cd65e2424bc55572fdf1be36b02ac391a6cfd9/web) | `68cd65e`, `feat/claim-page`; integrated into `main` at `b755abc` | Recipient entry, typed app callback, eligibility/proof loading and wallet submission |
 | E2E fixture run | [e2e/](https://github.com/levarac/mizar/tree/c9c7f1d5476dbe523ada877a84b81db1d86d26a1/e2e) | `c9c7f1d`, `feat/e2e-fixture-run` | Evaluator-to-claim rehearsal on local Anvil with MockEAS |
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
@@ -90,9 +90,9 @@ The app-side typed signing entry point is new hackathon work inside Beid. It bec
 
 Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
 
-- [evaluator/src/codec.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/codec.ts): wire domains and canonical COSE rules.
-- [evaluator/src/evidence.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/evidence.ts): observation, commitment and receipt domains, admission fields and inclusion-tree rules.
-- [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing evidence-layer protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
+- [evaluator/src/codec.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/codec.ts): wire domains and canonical COSE rules.
+- [evaluator/src/evidence.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evidence.ts): observation, commitment and receipt domains, admission fields and inclusion-tree rules.
+- [evaluator/src/evaluate.ts](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/src/evaluate.ts) (`deriveRelations`): the mutual-pair definition, where both reporters list each other's rotating identifier in the same event, definition and time window, follows the pre-existing evidence-layer protocol's relation derivation. The identifier-conflict filter, per-key-pair window accumulation, the N/B threshold, the credential requirement and the snapshot outputs are new.
 
 The contract also vendors upstream EAS and OpenZeppelin dependencies; versions and commit references are listed in [contracts/README.md](contracts/README.md).
 
@@ -112,9 +112,9 @@ The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:Regist
 
 ## Local build and verification
 
-Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Use the revisions in the components table in separate source checkouts while their branches are being integrated. Each block starts from its repository root. The E2E checkout includes its own evaluator revision; install and run that checkout together.
+Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator and claim-page commands run from a Mizar checkout containing `main` revision `787e9b6`, including this branch. Each block starts from its repository root. Alcor uses its own repository. The E2E runner still needs a separate checkout at `c9c7f1d`, which includes its own evaluator revision; install and run that checkout together.
 
-For example: `git clone https://github.com/levarac/mizar mizar-evaluator`, then `git -C mizar-evaluator checkout eae54bc` (use `c9c7f1d` for E2E).
+For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout 787e9b6`. The evaluator no longer needs a separate feature-branch checkout. Use `c9c7f1d` in a separate checkout for E2E.
 
 ### Contract
 
@@ -137,9 +137,13 @@ pnpm mizar evaluate --params test/fixtures/params.json --out /tmp/mizar-readme-o
 pnpm mizar verify --manifest /tmp/mizar-readme-out-latest/manifest.json
 ```
 
-The checked-in inputs contain synthetic observations, credentials and anchor mappings. Their public deterministic test keys are not event credentials. Offline `PASS` establishes consistency with those archived inputs, including their supplied block mapping; it does not prove that a root or input was anchored on Sepolia.
+The checked-in inputs contain synthetic observations, credentials and anchor mappings. Their public deterministic test keys are not event credentials. Offline `PASS` establishes consistency with the poster-supplied archive, including its parameters, credential list and block mapping; it does not prove that those inputs are complete or that a root or input was anchored on Sepolia.
 
-Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry` and `--commitment-registry`. The verifier must choose the chain and registry addresses independently of the poster's parameters. Missing required context produces `UNAVAILABLE`; a checked mismatch produces `FAIL`. See the [evaluator README](https://github.com/levarac/mizar/blob/eae54bc3492eac83818aeacdda2dbc6dc461cbdd/evaluator/README.md). Live chain verification was not run for this document.
+Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. An archived parameters file is refused as a trust source.
+
+Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that valid credentials issued by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The organizer's parameters publication location and independent digest remain undecided.
+
+Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid archive contents and checked archive mismatches produce `FAIL`. A mismatch between the verifier's parameter copy and its optional expected digest is `UNAVAILABLE`. See the [current evaluator README](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/README.md) for the complete command and trust assumptions. Live chain verification was not run for this document.
 
 ### Claim page
 
@@ -179,18 +183,18 @@ The tests use local Miniflare D1 and an injected World verification client. The 
 
 ### Observed local results
 
-Executed on 2026-09-26 JST using temporary source copies at the pinned revisions above, Node.js 24.16.0 and Foundry 1.7.1. These results cover source-level local verification only.
+These historical local runs were executed on 2026-09-26 JST using Node.js 24.16.0 and Foundry 1.7.1. The table identifies the actual tested revisions. The evaluator results are from `eae54bc`, before the later changes integrated into `main` at `787e9b6`; builds and tests were not rerun for this documentation update. These results cover source-level local verification only.
 
 | Check | Observed result |
 | --- | --- |
-| Contract build / tests | Exit 0 / exit 0; 13 passed, 0 failed, 1 optional fork test skipped |
+| Contract build / tests | Exit 0 / exit 0; 13 passed, 0 failed, 1 optional fork test skipped at `b755abc` |
 | Evaluator tests / typecheck | Exit 0 / exit 0; 20 tests passed at `eae54bc` |
-| Fixture evaluate / offline verify | Exit 0 / exit 0; 4 eligible, 4 rejected, 1 invalid observation; `PASS` |
-| Claim-page tests / build | Exit 0 / exit 0; 9 tests passed |
-| Local E2E | Exit 0; all six reported checks passed |
-| Alcor Worker tests / typecheck | Exit 0 / exit 0; 9 tests passed |
+| Fixture evaluate / offline verify | Exit 0 / exit 0; 4 eligible, 4 rejected, 1 invalid observation; `PASS` at `eae54bc` |
+| Claim-page tests / build | Exit 0 / exit 0; 9 tests passed at `68cd65e` |
+| Local E2E | Exit 0; all six reported checks passed at `c9c7f1d` |
+| Alcor Worker tests / typecheck | Exit 0 / exit 0; 9 tests passed at `7909844` |
 
-All four dependency installs above completed with exit 0. No live World proof, real-device interaction, Sepolia deployment or live claim was verified by these checks.
+All four dependency installs for those tested revisions completed with exit 0. No live World proof, real-device interaction, Sepolia deployment or live claim was verified by these checks.
 
 ## Sponsor API usage
 

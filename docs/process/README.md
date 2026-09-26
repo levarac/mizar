@@ -10,6 +10,8 @@ The numbering follows development phases and the known revision order within eac
 
 These documents preserve requested checks, not proof that every requested check ran or passed. Observed local results and their limits are recorded in the [submission README](../../README.md#observed-local-results). No new build or runtime verification was performed when preparing this archive.
 
+The evaluator is now integrated into Mizar `main` at [787e9b6](https://github.com/levarac/mizar/commit/787e9b6a27d1f9645b5d7a7997c137b027f5ac86), from `feat/evaluator` revision `a7a94a3`. Revision targets and command descriptions inside the prompts remain historical. Use the [current evaluator documentation](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/README.md) for live verification, including externally obtained trusted parameters and the credential-source and log-range options. The E2E snapshot documented here remains on its separate branch at `c9c7f1d`.
+
 ## Planning record
 
 The three planning briefs describe these successive stages:
