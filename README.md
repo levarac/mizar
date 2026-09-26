@@ -106,7 +106,7 @@ Pre-existing parts supplied by the team:
 
 Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record.
 
-The app-side typed signing entry point is new hackathon work on [Beid's `demo/ethtokyo-two-iphone` branch](https://github.com/levarac/beid/tree/demo/ethtokyo-two-iphone). Beid's repository is public, but this README's local checks do not independently verify the app-side integration.
+The hackathon changes to Beid, a typed event-key signing entry point and a two-iPhone demo configuration, are on [Beid's `demo/ethtokyo-two-iphone` branch](https://github.com/levarac/beid/tree/demo/ethtokyo-two-iphone) at head [5a848fb](https://github.com/levarac/beid/commit/5a848fb1d07bae01ec5a9b5550f0e13bca6fdf6e). Beid's repository is public, but this README's local checks do not independently verify the app-side integration.
 
 Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers referring to Parallax, and one function reimplements a pre-existing definition:
 
