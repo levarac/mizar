@@ -120,6 +120,9 @@ unparsable input or output file is a `FAIL`, and output files are read only
 after the root and on-chain checks. The automated suite uses a local JSON-RPC
 stub, including live evaluation without a supplied mapping, missing or foreign
 commitments, cutoff exclusion, range splitting and the call cap.
+The live evaluation path has been tested only against that JSON-RPC stub.
+No live Sepolia evaluation has been run yet because the operator's evidence
+endpoint was unavailable.
 
 Future work: the credential omission check trusts whatever list the verifier
 fetches. A list head signed by Alcor (entry count plus digest per cutoff) would
