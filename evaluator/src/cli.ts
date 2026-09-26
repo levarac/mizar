@@ -1,9 +1,9 @@
-import { readFile, mkdir, realpath, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { readFile, mkdir, writeFile } from "node:fs/promises";
+import { basename, dirname, join, resolve } from "node:path";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { evaluateRule, verifyCredentials, type Credential, type CredentialList, type Parameters } from "./evaluate.js";
 import { verifyEvidence, type Envelope } from "./evidence.js";
-import { UnavailableError, digestBytes, loadEnvelopes, readSource, sourcePath, writeJson } from "./io.js";
+import { UnavailableError, digestBytes, insideArchive, loadEnvelopes, readSource, sourcePath, writeJson } from "./io.js";
 import { checkAdmissionRegistries, readAnchorsFromRegistry, readChainId, readPostedRoot } from "./chain.js";
 
 type Args = Record<string, string>;
@@ -125,15 +125,6 @@ function report(receipt: Receipt): number {
 const unavailable = (reason: string) => report({ result: "UNAVAILABLE", reason });
 const mismatch = (reason?: string) =>
   report(reason ? { result: "FAIL", fault: "root_mismatch", reason } : { result: "FAIL", fault: "root_mismatch" });
-// The poster writes the archive, so trusted parameters read from inside it are not trusted.
-async function insideArchive(source: string, archiveBase: string): Promise<boolean> {
-  if (/^https:\/\//.test(source) || /^https:\/\//.test(archiveBase))
-    return /^https:\/\//.test(source) && /^https:\/\//.test(archiveBase) &&
-      new URL(source).href.startsWith(new URL(archiveBase).href);
-  const real = (path: string) => realpath(path).catch(() => resolve(path));
-  const inside = relative(await real(archiveBase), await real(resolve(source)));
-  return !inside.startsWith("..") && !isAbsolute(inside);
-}
 // Checks the snapshot against the chain and sources the verifier chose. Returns an exit
 // code when the receipt is decided here, or undefined when every check holds.
 async function verifyOnChain(rpc: string, contract: string, trusted: TrustedChain | undefined,
