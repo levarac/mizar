@@ -20,6 +20,22 @@ list, and a synthetic pending-feed marker. It also writes
 check. The separate `alcor-signed-credentials-v1.json` is the exact public
 producer fixture from Alcor commit `448ab64`.
 
+## Recorded comparisons
+
+`mizar compare --params p.json --out <empty-directory>` runs the same local
+inputs with no human check, no encounter rule, and the full rule. It writes
+only `comparison.md` and prints the identical **NON-CANONICAL** report. Roots,
+manifests and claim proofs are omitted; remote sources and RPC settings are
+rejected. It never changes `evaluate` or `verify` options or outputs.
+
+See the [recorded synthetic comparison](../docs/demo/comparison.md) for the
+published attacker dataset, expected table and a single reproduction command.
+These are synthetic signed fixtures, not a live snapshot or posted records.
+The optional `comparison.cases` parameter groups addresses by `{label,
+addresses}`; every evaluated address must appear exactly once. Without it,
+the table has one row per address. `comparison.provenance: recorded-synthetic`
+labels the fixture origin; that label is a declaration, not a live verification.
+
 ## Parameters and inputs
 
 `evidenceSource` is a local JSON file containing verification-envelope pages,
