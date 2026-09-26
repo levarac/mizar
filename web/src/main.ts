@@ -190,10 +190,6 @@ async function boot(): Promise<void> {
   } else if (hash.includes("sig=")) {
     try {
       const callback = parseCallbackFragment(hash);
-      session = clearClaimIfDifferent(session, {
-        eventKeyAddress: callback.a,
-        recipient: session.pending?.recipient,
-      });
       if (!session.pending) throw new Error("No pending app request is stored in this browser.");
       const accepted = await acceptClaimCallback({
         fragment: callback,
@@ -217,7 +213,6 @@ async function boot(): Promise<void> {
       history.replaceState(null, "", window.location.pathname + window.location.search);
       setStatus("App callback accepted.");
     } catch (error) {
-      saveSession(session);
       setStatus(error instanceof Error ? error.message : "Callback rejected.", true);
     }
   }
