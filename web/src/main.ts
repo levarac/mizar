@@ -1,4 +1,4 @@
-import { friendlyError, setPurpose, showState, showTransaction } from "./presentation";
+import { friendlyError, setPurpose, showState, showTransaction, type ClaimView } from "./presentation";
 import {
   createWalletClient,
   custom,
@@ -40,6 +40,7 @@ const submitButton = document.querySelector<HTMLButtonElement>("#submit")!;
 const signatureEl = document.querySelector<HTMLElement>("#signature")!;
 setPurpose(claimPageConfig.eventId);
 let hasStatusError = false;
+let recipientErrorReturnState: ClaimView = "idle";
 
 const chain = defineChain({
   id: claimPageConfig.chainId,
@@ -73,9 +74,11 @@ function describeEligibility(eligible: EligibleKey): string {
 }
 
 function render(session: Session, eligible?: EligibleKey | null): void {
-  if (session.pending && !session.claim) {
-    recipientInput.value = session.pending.recipient;
-    recipientGrouped.textContent = groupAddress(session.pending.recipient);
+  const pendingRecipient = session.pending?.recipient;
+  const hasPendingRecipient = typeof pendingRecipient === "string" && isAddress(pendingRecipient) && getAddress(pendingRecipient) !== zeroAddress;
+  if (hasPendingRecipient && !session.claim) {
+    recipientInput.value = pendingRecipient;
+    recipientGrouped.textContent = groupAddress(pendingRecipient);
   }
   eventKeyEl.textContent = session.eventKeyAddress
     ? groupAddress(session.eventKeyAddress)
@@ -94,9 +97,9 @@ function render(session: Session, eligible?: EligibleKey | null): void {
     : "No claim signature yet.";
   submitButton.disabled = !session.claim || eligible === null;
   if (!hasStatusError) {
-    showState(!session.eventKeyAddress ? (session.pending ? "signature" : "idle")
+    showState(!session.eventKeyAddress ? (hasPendingRecipient ? "signature" : "idle")
       : eligible === undefined ? "lookup" : eligible === null ? "not-eligible"
-      : session.claim ? "ready" : session.pending ? "signature" : "recipient");
+      : session.claim ? "ready" : hasPendingRecipient ? "signature" : "recipient");
   }
 }
 
@@ -111,9 +114,17 @@ function readRecipient(): Address | null {
 function showRecipient(): void {
   const value = recipientInput.value.trim();
   if (isAddress(value) && getAddress(value) === zeroAddress) {
+    const current = document.querySelector<HTMLElement>("#claim-panel")?.dataset.state as ClaimView | undefined;
+    if (current && current !== "error") recipientErrorReturnState = current;
     recipientGrouped.textContent = "";
     setStatus("The recipient cannot be the zero address.", true);
     return;
+  }
+  if (statusEl.textContent === "The recipient cannot be the zero address.") {
+    hasStatusError = false;
+    statusEl.textContent = "";
+    statusEl.classList.toggle("error", false);
+    showState(recipientErrorReturnState);
   }
   const recipient = readRecipient();
   recipientGrouped.textContent = recipient ? groupAddress(recipient) : "";

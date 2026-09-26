@@ -773,3 +773,18 @@ footer a {
     min-height: 720px;
   }
 }
+
+.actions { display: flex; flex-direction: column; gap: 10px; }
+button.secondary {
+  order: 2;
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  padding: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  width: auto;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+button.secondary:hover { color: #003DD0; }

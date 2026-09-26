@@ -97,10 +97,11 @@ export function showState(state: ClaimView, message?: string): void {
     .forEach((el) =>
       el.classList.toggle("active", Number(el.dataset.step) === step),
     );
-  document.querySelector<HTMLInputElement>("#recipient")!.readOnly = ![
-    "idle",
-    "recipient",
-    "error",
+  document.querySelector<HTMLInputElement>("#recipient")!.readOnly = [
+    "submitting",
+    "submitted",
+    "claimed",
+    "already-claimed",
   ].includes(state);
   const recipientVisible = [
     "idle",
@@ -120,8 +121,12 @@ export function showState(state: ClaimView, message?: string): void {
     "idle",
     "recipient",
     "signature",
+    "ready",
     "error",
   ].includes(state);
+  document
+    .querySelector<HTMLElement>("#sign")!
+    .classList.toggle("secondary", state === "ready");
   document.querySelector<HTMLElement>("#submit")!.hidden = ![
     "ready",
     "submitting",
