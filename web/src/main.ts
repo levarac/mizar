@@ -218,6 +218,7 @@ async function boot(): Promise<void> {
     setStatus("The app cancelled the signature.", true);
     history.replaceState(null, "", window.location.pathname + window.location.search);
   } else if (hash.includes("sig=")) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
     try {
       const callback = parseCallbackFragment(hash);
       if (!session.pending) throw new Error("No pending app request is stored in this browser.");
