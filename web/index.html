@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Claim</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Claim</h1>
+      <p id="status" role="status"></p>
+      <section>
+        <h2>Recipient</h2>
+        <label for="recipient">Address that receives the attestation</label>
+        <input id="recipient" name="recipient" autocomplete="off" spellcheck="false" placeholder="0x" />
+        <p id="recipient-grouped"></p>
+        <button id="sign" type="button">Open the app to sign the claim</button>
+      </section>
+      <section>
+        <h2>Event key</h2>
+        <p id="event-key">Waiting for the app callback.</p>
+      </section>
+      <section>
+        <h2>Eligibility</h2>
+        <p id="eligibility">Waiting for the app callback.</p>
+      </section>
+      <section>
+        <h2>Submit</h2>
+        <p id="signature">No claim signature yet.</p>
+        <button id="submit" type="button">Submit claim from the connected wallet</button>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
