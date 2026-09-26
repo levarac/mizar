@@ -3,18 +3,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAddress, zeroAddress } from "viem";
 import html from "../index.html?raw";
 import eligible from "./fixtures/evaluator/eligible.json";
+import proof from "./fixtures/evaluator/proofs/0x4ca63cdf34a0fefffab20834fd69be3b88d5c6de.json";
 import { showState, type ClaimView } from "./presentation";
 import { loadSession, saveSession } from "./session";
 
-vi.mock("./config", () => ({
+vi.mock("./config", async () => ({
   claimPageConfig: {
     chainId: 11155111,
     chainName: "Sepolia",
     rpcUrl: "https://ethereum-sepolia-rpc.publicnode.com",
     claimContract: "0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC",
     eventId: `0x${"11".repeat(32)}`,
-    eligibleJsonUrl: "/snapshots/1/eligible.json",
-    expectedRoot: `0x${"22".repeat(32)}`,
+    eligibleJsonUrl: "https://example.org/snapshots/1/eligible.json",
+    expectedRoot: (await import("./fixtures/evaluator/proofs/0x4ca63cdf34a0fefffab20834fd69be3b88d5c6de.json")).default.root,
     snapshotId: 1,
   },
 }));
@@ -43,6 +44,14 @@ afterEach(() => {
 });
 
 describe("claim presentation preserves recipient corrections", () => {
+  it("keeps submission unavailable for an error without a stored claim", () => {
+    const submit = document.querySelector<HTMLButtonElement>("#submit")!;
+    expect(submit.disabled).toBe(true);
+    showState("error");
+    expect(submit.hidden).toBe(true);
+    expect(submit.disabled).toBe(true);
+    expect(sign().classList.contains("secondary")).toBe(false);
+  });
   it.each(["idle", "signature", "ready"] as ClaimView[])(
     "keeps the recipient and sign action available in %s",
     (state) => {
@@ -162,5 +171,39 @@ describe("claim presentation preserves recipient corrections", () => {
     expect(
       document.querySelector<HTMLElement>("#claim-panel")!.dataset.state,
     ).toBe("idle");
+  });
+  it("keeps a stored claim available to retry after wallet rejection", async () => {
+    saveSession({
+      eventKeyAddress: key,
+      claim: {
+        eventKeyAddress: key,
+        recipient: originalRecipient,
+        signature: "0x11",
+        compressedKey: "0x02",
+      },
+    });
+    const saved = loadSession();
+    const request = vi.fn().mockRejectedValue(
+      Object.assign(new Error("User rejected the request."), { code: 4001 }),
+    );
+    vi.stubGlobal("ethereum", { request });
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => ({
+      ok: true,
+      json: async () => url.includes("/proofs/") ? proof : eligible,
+    })));
+    await import("./main");
+    const panel = document.querySelector<HTMLElement>("#claim-panel")!;
+    const submit = document.querySelector<HTMLButtonElement>("#submit")!;
+    await vi.waitFor(() => expect(panel.dataset.state).toBe("ready"));
+    submit.click();
+    await vi.waitFor(() => expect(panel.dataset.state).toBe("error"));
+    expect(request.mock.calls[0][0]).toEqual({ method: "eth_requestAccounts" });
+    expect(submit.hidden).toBe(false);
+    expect(submit.disabled).toBe(false);
+    expect(sign().classList.contains("secondary")).toBe(true);
+    expect(loadSession()).toEqual(saved);
+    submit.click();
+    await vi.waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(panel.dataset.state).toBe("error"));
   });
 });

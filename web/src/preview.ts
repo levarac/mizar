@@ -54,6 +54,15 @@ export function startPreview(): void {
       states.find(([value]) => value === state)?.[0] ?? "recipient";
     select.value = selected;
     history.replaceState(null, "", `?state=${selected}`);
+    const signed = [
+      "ready",
+      "submitting",
+      "submitted",
+      "claimed",
+      "already-claimed",
+    ].includes(selected);
+    document.querySelector<HTMLButtonElement>("#submit")!.disabled =
+      !signed || selected === "submitting";
     renderRules(params, config);
     if (["unconfigured", "params-unverified"].includes(selected))
       showRuleError();
@@ -80,20 +89,11 @@ export function startPreview(): void {
           : hasKey
             ? `${eligible.explanations[0].partners.length} distinct partners in the published eligible list.`
             : "Not checked yet.";
-    const signed = [
-      "ready",
-      "submitting",
-      "submitted",
-      "claimed",
-      "already-claimed",
-    ].includes(selected);
     document.querySelector("#signature")!.textContent = signed
       ? "App signature received for this recipient."
       : "No app signature yet.";
     input.value = recipient;
     grouped.textContent = groupAddress(recipient);
-    document.querySelector<HTMLButtonElement>("#submit")!.disabled =
-      selected === "submitting";
     showTransaction(`0x${"ab".repeat(32)}`);
     setPurpose(config.eventId);
   };

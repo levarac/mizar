@@ -162,13 +162,12 @@ export function showState(state: ClaimView, message?: string): void {
     "ready",
     "error",
   ].includes(state);
+  const submit = document.querySelector<HTMLButtonElement>("#submit")!;
+  const canRetryClaim = state === "error" && !submit.disabled;
   document
     .querySelector<HTMLElement>("#sign")!
-    .classList.toggle("secondary", state === "ready");
-  document.querySelector<HTMLElement>("#submit")!.hidden = ![
-    "ready",
-    "submitting",
-  ].includes(state);
+    .classList.toggle("secondary", state === "ready" || canRetryClaim);
+  submit.hidden = !["ready", "submitting"].includes(state) && !canRetryClaim;
   document.querySelector<HTMLElement>("#transaction-link")!.hidden = ![
     "submitted",
     "claimed",
