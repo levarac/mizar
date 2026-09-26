@@ -12,7 +12,7 @@ import { AbiCoder, getBytes, id, recoverAddress, toBeHex, zeroPadValue } from "e
 import { appDigest, appMessage, eventKeyAddress, fromHex, hex, sha } from "../src/codec.js";
 import { verifyEvidence, type Envelope } from "../src/evidence.js";
 import { deriveRelations, evaluateRule, verifyCredentials, type CredentialList, type Parameters } from "../src/evaluate.js";
-import { loadEnvelopes } from "../src/io.js";
+import { insideArchive, loadEnvelopes } from "../src/io.js";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const fixture = <T>(name: string): T =>
@@ -208,6 +208,28 @@ describe("OpenZeppelin address-only tree", () => {
       expect(tree.getProof(i)).toEqual(vector.proofs[address]);
       expect(StandardMerkleTree.verify(vector.root, ["address"], [address], vector.proofs[address])).toBe(true);
     }
+  });
+});
+
+describe("trusted-params guard", () => {
+  it("treats every spelling of a path inside the archive as inside", async () => {
+    const archive = mkdtempSync(join(tmpdir(), "mizar-guard-test-"));
+    try {
+      expect(await insideArchive(join(archive, "..params.json"), archive)).toBe(true);
+      expect(await insideArchive(join(archive, "inputs", "params.json"), archive)).toBe(true);
+      expect(await insideArchive(join(archive, "..", "params.json"), archive)).toBe(false);
+      expect(await insideArchive(archive + "-sibling/params.json", archive)).toBe(false);
+      // An uppercase scheme is a relative local path to the reader, so it is to the guard too.
+      expect(await insideArchive("HTTPS://../..params.json", archive, archive)).toBe(true);
+      expect(await insideArchive("HTTPS://../inputs/params.json", archive, join(archive, "inputs"))).toBe(true);
+    } finally { rmSync(archive, { recursive: true, force: true }); }
+    const base = "https://host.example/a/";
+    for (const url of ["https://host.example/%61/inputs/params.json", "https://host.example/A/params.json",
+      "https://HOST.example:443/a/params.json", "https://host.example/published/params.json"])
+      expect(await insideArchive(url, base)).toBe(true);
+    expect(await insideArchive("https://other.example/a/params.json", base)).toBe(false);
+    expect(await insideArchive("/tmp/params.json", base)).toBe(false);
+    expect(await insideArchive("https://host.example/a/params.json", "/tmp/archive")).toBe(false);
   });
 });
 
@@ -451,6 +473,9 @@ describe("CLI receipt", () => {
       // The archive's own params file is poster-written and never accepted as trusted.
       await expectUnavailable(honest.manifest, "--trusted-params is inside the archive",
         { "trusted-params": join(out, "honest", "inputs", "params.json") });
+      const dotted = join(out, "honest", "..params.json");
+      writeFileSync(dotted, readFileSync(trustedParams));
+      await expectUnavailable(honest.manifest, "--trusted-params is inside the archive", { "trusted-params": dotted });
       const publishedSha = hex(sha(readFileSync(trustedParams)));
       expect((await verifyOnChain(honest.manifest, { "trusted-params-sha256": publishedSha })).stdout)
         .toContain('"result":"PASS"');
