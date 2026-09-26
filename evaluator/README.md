@@ -49,7 +49,8 @@ the snapshot against sources the verifier chooses:
 
 ```sh
 pnpm mizar verify --manifest dir/manifest.json --rpc <url> --contract <claim> \
-  --trusted-params <published params.json> --chain-id 11155111 \
+  --trusted-params <published params.json> [--trusted-params-sha256 <hex>] \
+  --chain-id 11155111 [--from-block <n>] \
   --event-registry <addr> --definition-registry <addr> --commitment-registry <addr> \
   [--credentials-source <Alcor list URL or file>]
 ```
@@ -59,7 +60,16 @@ trust anchor comes from these flags instead. This repository does not pin the
 evidence layer's Sepolia registry addresses, so without the flags an on-chain
 verify returns `UNAVAILABLE`.
 
-- `--trusted-params` is the parameters file published before the snapshot. Its
+- `inputs/params.json` in the archive is written by the poster and is never a
+  trust anchor. `--trusted-params` must be the parameters file published before
+  the snapshot, obtained from outside the archive; a path or URL inside the
+  manifest's directory is refused with `UNAVAILABLE`. **Pending:** where the
+  organizer publishes these parameters, and a poster-independent digest to pin
+  them, are not decided yet. Until then `--trusted-params-sha256` lets the
+  verifier check its copy against a digest obtained out of band; a mismatch is
+  `UNAVAILABLE`, because it means the verifier's own copy is wrong.
+- The trusted parameters' `chainId` must equal `--chain-id`, or the result is
+  `UNAVAILABLE`. Their
   `evaluatorVersion`, `eventId`, `chainId`, `minPartners`,
   `minWindowsPerPartner`, `credentialsPublicKey`, `snapshot.id` and
   `snapshot.cutoffBlock` must equal the archived parameters; a difference is a
@@ -72,6 +82,9 @@ verify returns `UNAVAILABLE`.
   verified by the cutoff must be in the archived list; an omission is a `FAIL`,
   an unreachable list is `UNAVAILABLE`. The list only grows, so later entries
   are ignored.
+- Commitment logs count only when their recorder is the operator registered for
+  the event. This assumes the registry records each event's commitments from
+  that operator alone; logs from any other recorder are ignored.
 - The event registration must match, and the admission must carry the latest
   definition anchored by the cutoff. Every commitment is mapped to its registry
   block, every commitment anchored at or before the cutoff must be in the
@@ -80,8 +93,14 @@ verify returns `UNAVAILABLE`.
   cutoff block, and the SHA-256 of the exact written manifest bytes. The
   contract's snapshots are private, so the event is the public read surface.
 
-Log reads split a block range in half when the RPC rejects it. RPC failures
-are `UNAVAILABLE`, never a `FAIL`. None of this has been run against a live
+Log reads start at `--from-block` (a trusted lower bound such as the registry
+deployment block; default 0). A range the RPC rejects as too wide or too large
+is split in half down to 100 blocks; any other RPC error, or more than 500
+`eth_getLogs` calls, is `UNAVAILABLE`. Only failures of sources the verifier
+chose (the manifest fetch, the RPC, the trusted parameters and credential list)
+are `UNAVAILABLE`. Archive content is the poster's responsibility: a missing or
+unparsable input or output file is a `FAIL`, and output files are read only
+after the root and on-chain checks. None of this has been run against a live
 Sepolia RPC; the suite uses a local JSON-RPC stub.
 
 Future work: the credential omission check trusts whatever list the verifier

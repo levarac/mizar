@@ -263,12 +263,24 @@ describe("CLI receipt", () => {
       expect(evaluatedReceipt.root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
       expect(evaluatedReceipt.manifestDigest).toBe("0x1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a");
       expect(run("verify", "--manifest", manifestPath).stdout).toContain('"result":"PASS"');
+      // A missing or garbled output file is the snapshot's fault, never UNAVAILABLE.
+      const rejectedPath = join(out, "rejected.json"), rejectedBytes = readFileSync(rejectedPath);
+      rmSync(rejectedPath);
+      const noRejected = run("verify", "--manifest", manifestPath);
+      expect(noRejected.status).toBe(1);
+      expect(noRejected.stdout).toContain('"fault":"threshold_miscalculation"');
+      writeFileSync(rejectedPath, "network timeout");
+      const garbled = run("verify", "--manifest", manifestPath);
+      expect(garbled.status).toBe(1);
+      expect(garbled.stdout).toContain("threshold output unreadable: rejected.json");
+      rmSync(rejectedPath);
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       manifest.root = manifest.root.slice(0, -1) + (manifest.root.endsWith("0") ? "1" : "0");
       writeFileSync(manifestPath, JSON.stringify(manifest));
       const badRoot = run("verify", "--manifest", manifestPath);
       expect(badRoot.status).toBe(1);
       expect(badRoot.stdout).toContain('"fault":"root_mismatch"');
+      writeFileSync(rejectedPath, rejectedBytes);
       manifest.root = evaluateRule(params, evidence, credentials).root;
       writeFileSync(manifestPath, JSON.stringify(manifest));
       const inputPath = join(out, "inputs/credentials.json");
@@ -311,10 +323,11 @@ describe("CLI receipt", () => {
       commitmentRegistry: "0x00000000000000000000000000000000000000a1" };
     const [page] = pages, admission = page.admission, anchor = page.commitments[0].anchor;
     const abi = AbiCoder.defaultAbiCoder(), word = (value: string | number) => zeroPadValue(toBeHex(value), 32);
-    const cutoff = params.snapshot.cutoffBlock, head = 5_000, rangeCap = 1_500;
+    const cutoff = params.snapshot.cutoffBlock, rangeCap = 1_500;
+    let head = 5_000, getLogsCalls = 0;
     let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
     let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest];
-    let extraCommitment = false, extraDefinition = false, rpcDown = false;
+    let extraCommitment = false, junkCommitment = false, extraDefinition = false, rpcDown = false;
     const log = (address: string, block: number, topics: string[], data: string) => ({
       address, blockNumber: toBeHex(block), blockHash: "0x" + "11".repeat(32),
       transactionHash: "0x" + "22".repeat(32), transactionIndex: "0x0", logIndex: "0x0", removed: false, topics, data });
@@ -335,12 +348,14 @@ describe("CLI receipt", () => {
           ...(extraDefinition ? [definition(d.sequence + 1, "cd".repeat(32), d.definitionDigest, 30)] : [])];
       }
       if (topic0 === id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")) {
-        const commitment = (sequence: number, digest: string, previous: string, block: number) =>
+        const commitment = (sequence: number, digest: string, previous: string, block: number,
+          recorder = "0x" + admission.anchorRegistration.operator) =>
           log(registries.commitmentRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
-            abi.encode(["bytes32", "address", "uint64"], ["0x" + previous,
-              "0x" + admission.anchorRegistration.operator, anchor.committedAt]));
+            abi.encode(["bytes32", "address", "uint64"], ["0x" + previous, recorder, anchor.committedAt]));
         return [commitment(anchor.sequence, anchor.commitmentDigest, anchor.previousCommitmentDigest, anchorBlock),
-          ...(extraCommitment ? [commitment(2, "ab".repeat(32), anchor.commitmentDigest, cutoff - 5)] : [])];
+          ...(extraCommitment ? [commitment(2, "ab".repeat(32), anchor.commitmentDigest, cutoff - 5)] : []),
+          ...(junkCommitment ? [commitment(2, "ef".repeat(32), anchor.commitmentDigest, cutoff - 4,
+            "0x" + "99".repeat(20))] : [])];
       }
       return !postedLogPresent ? [] : [log(contract, cutoff + 5, [topic0, word(params.snapshot.id)],
         abi.encode(["bytes32", "bytes32", "uint64"], [posted.root, posted.manifestDigest, posted.cutoffBlock]))];
@@ -348,7 +363,9 @@ describe("CLI receipt", () => {
     // Like public RPCs, the stub rejects wide getLogs ranges, so the reader must page.
     const getLogs = (filter: { fromBlock: string; toBlock: string; topics: string[] }) => {
       const from = Number(filter.fromBlock), to = filter.toBlock === "latest" ? head : Number(filter.toBlock);
-      if (rpcDown || to - from + 1 > rangeCap) return { error: { code: -32005, message: "block range too large" } };
+      getLogsCalls++;
+      if (rpcDown) return { error: { code: -32603, message: "internal error" } };
+      if (to - from + 1 > rangeCap) return { error: { code: -32005, message: "block range too large" } };
       return { result: logsFor(filter.topics[0]).filter(l => Number(l.blockNumber) >= from && Number(l.blockNumber) <= to) };
     };
     const server = createServer((req, res) => {
@@ -425,7 +442,23 @@ describe("CLI receipt", () => {
       const pass = await verifyOnChain(honest.manifest);
       expect(pass.stdout).toContain('"result":"PASS"');
       expect(pass.status).toBe(0);
-      await expectUnavailable(honest.manifest, "is not the trusted chain ID 1", { "chain-id": "1" });
+      await expectUnavailable(honest.manifest, "trusted parameters name another chain ID than --chain-id",
+        { "chain-id": "1" });
+      const otherChainParams = join(out, "other-chain-params.json");
+      writeFileSync(otherChainParams, JSON.stringify({ ...published, chainId: 1 }));
+      await expectUnavailable(honest.manifest, "RPC chain ID 11155111 is not the trusted chain ID 1",
+        { "chain-id": "1", "trusted-params": otherChainParams });
+      // The archive's own params file is poster-written and never accepted as trusted.
+      await expectUnavailable(honest.manifest, "--trusted-params is inside the archive",
+        { "trusted-params": join(out, "honest", "inputs", "params.json") });
+      const publishedSha = hex(sha(readFileSync(trustedParams)));
+      expect((await verifyOnChain(honest.manifest, { "trusted-params-sha256": publishedSha })).stdout)
+        .toContain('"result":"PASS"');
+      await expectUnavailable(honest.manifest, "do not match --trusted-params-sha256",
+        { "trusted-params-sha256": "00".repeat(32) });
+      const nullEntry = join(out, "null-entry-credentials.json");
+      writeFileSync(nullEntry, JSON.stringify({ ...credentials, credentials: [...credentials.credentials, null] }));
+      await expectUnavailable(honest.manifest, "trusted credential list unavailable", { "credentials-source": nullEntry });
       await expectFail(honest.manifest, "different commitmentRegistry",
         { "commitment-registry": "0x00000000000000000000000000000000000000a2" });
       await expectUnavailable(honest.manifest, "trusted credential list unavailable",
@@ -452,9 +485,20 @@ describe("CLI receipt", () => {
       extraDefinition = true;
       await expectFail(honest.manifest, "latest definition anchor differs from chain");
       extraDefinition = false;
+      // Recorders other than the registered operator cannot make the snapshot look incomplete.
+      junkCommitment = true;
+      expect((await verifyOnChain(honest.manifest)).stdout).toContain('"result":"PASS"');
+      junkCommitment = false;
+      // A non-range RPC error is not retried by splitting ranges.
       rpcDown = true;
+      getLogsCalls = 0;
       await expectUnavailable(honest.manifest, "RPC unavailable");
+      expect(getLogsCalls).toBe(1);
       rpcDown = false;
+      await expectUnavailable(honest.manifest, "event registration unavailable", { "from-block": "15" });
+      head = 2_000_000;
+      await expectUnavailable(honest.manifest, "more than 500 eth_getLogs calls");
+      head = 5_000;
       postedLogPresent = false;
       await expectUnavailable(honest.manifest, "RootPosted event unavailable");
       postedLogPresent = true;
@@ -466,6 +510,9 @@ describe("CLI receipt", () => {
       writeFileSync(reduced, JSON.stringify(list));
       const m1 = await evaluateAs("m1", { credentialsSource: reduced });
       expect(m1.receipt.root).not.toBe(honest.receipt.root);
+      await expectFail(m1.manifest, "credential verified before cutoff missing from inputs");
+      // Deleting an output file from a tampered archive must not turn FAIL into UNAVAILABLE.
+      rmSync(join(out, "m1", "rejected.json"));
       await expectFail(m1.manifest, "credential verified before cutoff missing from inputs");
       // m2: the poster pins its own attestation key; m4: the poster lowers the thresholds.
       const m2 = await evaluateAs("m2", { credentialsPublicKey: "0x" + "11".repeat(32) });
