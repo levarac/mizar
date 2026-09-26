@@ -330,9 +330,11 @@ async function main() {
     assert.equal(receipt.result, 'PASS', `mizar verify returned ${verifyOut}`);
     console.log('PASS: offline mizar verify returned {"result":"PASS"}');
 
-    // The evaluator's on-chain comparison (verify --rpc) is UNAVAILABLE for
-    // fixture params that carry no registry addresses, so the script reads the
-    // RootPosted log itself: same topics and same fromBlock = cutoffBlock.
+    // verify --rpc additionally requires trusted --chain-id, --event-registry,
+    // --definition-registry, --commitment-registry, and --trusted-params;
+    // without them it reports UNAVAILABLE. The fixture params carry no such
+    // trusted inputs, so the script performs the on-chain comparison itself:
+    // it reads the RootPosted log with the same topics and fromBlock = cutoffBlock.
     const rootLogs = await provider.getLogs({
       address: claimAddress,
       topics: [

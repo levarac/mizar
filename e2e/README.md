@@ -48,9 +48,11 @@ pnpm e2e
    - `mizar verify --manifest <out>/manifest.json` (offline) prints
      `{"result":"PASS"}`;
    - the `RootPosted` log on anvil carries the manifest root, the `SHA256` of
-     the `manifest.json` bytes, and the params cutoff block. The evaluator's
-     `verify --rpc` check is `UNAVAILABLE` for fixture params (no registry
-     addresses), so the script performs the same log comparison itself.
+     the `manifest.json` bytes, and the params cutoff block. `verify --rpc`
+     requires trusted inputs (`--chain-id`, `--event-registry`,
+     `--definition-registry`, `--commitment-registry`, `--trusted-params`);
+     the fixture params provide none, so the CLI returns `UNAVAILABLE` and the
+     script performs the same log comparison itself.
 
 Everything runs against the local chain only; no Sepolia or other live
 network is touched.
