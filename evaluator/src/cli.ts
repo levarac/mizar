@@ -5,6 +5,7 @@ import { evaluateRule, verifyCredentials, type Credential, type CredentialList, 
 import { verifyEvidence, type Envelope } from "./evidence.js";
 import { UnavailableError, digestBytes, insideArchive, loadEnvelopes, readSource, sourcePath, writeJson } from "./io.js";
 import { checkAdmissionRegistries, configureLogReads, readAnchorsFromRegistry, readChainId, readPostedRoot } from "./chain.js";
+import { compare } from "./compare.js";
 
 type Args = Record<string, string>;
 function argsOf(input: string[]): Args {
@@ -364,6 +365,18 @@ async function progress(paramsFile: string, key: string, pendingArg?: string) {
 }
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
+  if (command === "compare") {
+    try {
+      const a = argsOf(rest);
+      if (!a.params || !a.out || Object.keys(a).some(key => !["params", "out"].includes(key)))
+        throw new Error("compare supports only --params and --out");
+      await compare(a.params, a.out);
+    } catch (error) {
+      console.error("NON-CANONICAL " + (error instanceof Error ? error.message : String(error)));
+      process.exitCode = 2;
+    }
+    return;
+  }
   const a = argsOf(rest);
   configureLogReads(a["min-log-span"] === undefined ? undefined : Number(a["min-log-span"]),
     a["max-log-calls"] === undefined ? undefined : Number(a["max-log-calls"]));

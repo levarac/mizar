@@ -40,6 +40,16 @@ The Alcor service is deployed in World ID staging. On **2026-09-26**, a real Wor
 
 The claim page's camera-ready design and read-only rule card are merged at `a798d1b`. The card loads the published parameters by URL and verifies their SHA-256 before displaying the rule. Deployment remains pending the first non-empty snapshot. The page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
 
+## Recorded synthetic rule comparison
+
+The [comparison report and one-command reproduction](docs/demo/comparison.md)
+run the same recorded synthetic evidence through three rules: no human check,
+no encounter rule, and the full rule. It covers honest attendees, Mallory's
+three phones sharing one human credential, and a credentialed walk-in with no
+encounters. All comparison output is **NON-CANONICAL**: eligibility counts
+only, with no manifest, claim proofs or exported root. This is not a live
+snapshot and has not been posted.
+
 ## Architecture
 
 ```mermaid
