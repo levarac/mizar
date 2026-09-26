@@ -44,13 +44,13 @@
   </div>
 
   <figure class="hero-figure">
-    <svg class="encounter" viewBox="0 0 520 440" role="img" aria-labelledby="enc-title enc-desc">
+    <svg class="encounter" viewBox="50 0 430 440" role="img" aria-labelledby="enc-title enc-desc">
       <title id="enc-title">Four phones meeting over two time windows</title>
       <desc id="enc-desc">Phones A, B and C see each other in both windows, so each has two partners with two windows and passes. The passer-by D meets C in one window only and fails.</desc>
       <g class="enc-state" font-family="var(--mono)">
-        <text class="st st-w1" x="0" y="18">WINDOW 1 OF 2</text>
-        <text class="st st-w2" x="0" y="18">WINDOW 2 OF 2</text>
-        <text class="st st-end" x="0" y="18">RESULT · N = 2, B = 2</text>
+        <text class="st st-w1" x="60" y="18">WINDOW 1 OF 2</text>
+        <text class="st st-w2" x="60" y="18">WINDOW 2 OF 2</text>
+        <text class="st st-end" x="60" y="18">RESULT · N = 2, B = 2</text>
       </g>
 
       <g class="rings" fill="none">
@@ -300,16 +300,16 @@
         <tr><th scope="col">Case</th><th scope="col">No human check</th><th scope="col">No encounter rule</th><th scope="col" class="full">Full rule</th></tr>
       </thead>
       <tbody>
-        <tr><th scope="row">Honest attendees</th><td class="mono">3 / 3</td><td class="mono">3 / 3</td><td class="mono full">3 / 3</td></tr>
-        <tr><th scope="row">Mallory: one human, three phones</th><td class="mono">3 / 3</td><td class="mono">1 / 3</td><td class="mono full">0 / 3</td></tr>
-        <tr><th scope="row">Walk-in: credential, no encounters</th><td class="mono">0 / 1</td><td class="mono">1 / 1</td><td class="mono full">0 / 1</td></tr>
+        <tr><th scope="row">Honest attendees</th><td data-label="No human check" class="mono">3 / 3</td><td data-label="No encounter rule" class="mono">3 / 3</td><td data-label="Full rule" class="mono full">3 / 3</td></tr>
+        <tr><th scope="row">Mallory: one human, three phones</th><td data-label="No human check" class="mono">3 / 3</td><td data-label="No encounter rule" class="mono">1 / 3</td><td data-label="Full rule" class="mono full">0 / 3</td></tr>
+        <tr><th scope="row">Walk-in: credential, no encounters</th><td data-label="No human check" class="mono">0 / 1</td><td data-label="No encounter rule" class="mono">1 / 1</td><td data-label="Full rule" class="mono full">0 / 1</td></tr>
       </tbody>
     </table>
   </div>
   <p class="fine">Counts are eligible event keys, not issued on-chain records. Synthetic signatures test the rule and replay mechanics; they do not establish live World ID verification, physical presence or chain anchoring. <a href="https://github.com/levarac/mizar/blob/main/docs/demo/comparison.md">Full report and one-command reproduction</a>.</p>
 
   <figure class="replay">
-    <a href="/graph/" class="replay-img"><img src="/img/graph-replay.png" width="1920" height="1080" loading="lazy" alt="Evidence replay: honest participants A, B and C pass with two partners each; Mallory's three phones fail; the walk-in fails. 3 of 7 keys pass."></a>
+    <a href="/graph/" class="replay-img"><img src="/img/graph-replay.png" width="1920" height="1080" decoding="async" alt="Evidence replay: honest participants A, B and C pass with two partners each; Mallory's three phones fail; the walk-in fails. 3 of 7 keys pass."></a>
     <figcaption>
       <span>The evaluator's graph export for the same recorded synthetic data, replayed window by window.</span>
       <a class="btn" href="/graph/">Open the interactive replay</a>
