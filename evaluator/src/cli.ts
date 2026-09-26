@@ -15,12 +15,32 @@ function argsOf(input: string[]): Args {
   }
   return args;
 }
-async function inputs(paramsFile: string) {
+// Resolve credentials only in memory. Neither the URL nor its environment value
+// belongs in published parameters, manifests, command arguments or RPC errors.
+function rpcUrl(source?: string): string | undefined {
+  if (!source?.startsWith("env:")) return source;
+  const name = source.slice(4);
+  if (!/^[A-Z_][A-Z0-9_]*$/.test(name) || !process.env[name])
+    throw new UnavailableError("RPC environment variable is invalid or unset");
+  return process.env[name];
+}
+function fromBlock(value = "0"): number {
+  const block = Number(value);
+  if (!Number.isSafeInteger(block) || block < 0)
+    throw new UnavailableError("--from-block must be a non-negative safe integer");
+  return block;
+}
+async function inputs(paramsFile: string, rpcSource?: string, startBlock = 0) {
   const paramsPath = resolve(paramsFile), base = dirname(paramsPath);
   let paramsBytes = await readFile(paramsPath);
   const params = JSON.parse(paramsBytes.toString()) as Parameters;
+  const endpoint = rpcUrl(rpcSource ?? params.rpcUrl);
+  if (params.rpcUrl !== undefined) {
+    delete params.rpcUrl;
+    paramsBytes = Buffer.from(JSON.stringify(params, null, 2) + "\n");
+  }
   const live = sourcePath(params.evidenceSource, base).startsWith("https://");
-  if (live && (!params.rpcUrl || !params.eventRegistry ||
+  if (live && (!endpoint || !params.eventRegistry ||
       !params.definitionRegistry || !params.commitmentRegistry))
     throw new Error("live snapshot requires RPC and all three registry addresses");
   const pages = await loadEnvelopes(params.evidenceSource, base, params.eventId);
@@ -28,10 +48,10 @@ async function inputs(paramsFile: string) {
   const credentialBytes = await readSource(params.credentialsSource, base);
   let anchorBytes: Buffer;
   if (live) {
-    await checkAdmissionRegistries(params.rpcUrl!, params.chainId, params.eventRegistry!,
-      params.definitionRegistry!, params.eventId, params.snapshot.cutoffBlock, pages);
-    const anchored = await readAnchorsFromRegistry(params.rpcUrl!, params.commitmentRegistry!,
-      params.eventId, params.chainId, params.snapshot.cutoffBlock, pages);
+    await checkAdmissionRegistries(endpoint!, params.chainId, params.eventRegistry!,
+      params.definitionRegistry!, params.eventId, params.snapshot.cutoffBlock, pages, startBlock);
+    const anchored = await readAnchorsFromRegistry(endpoint!, params.commitmentRegistry!,
+      params.eventId, params.chainId, params.snapshot.cutoffBlock, pages, startBlock);
     params.snapshot.cutoffTimestamp = anchored.cutoffTimestamp;
     paramsBytes = Buffer.from(JSON.stringify(params, null, 2) + "\n");
     anchorBytes = Buffer.from(JSON.stringify(anchored.mapping, null, 2) + "\n");
@@ -39,7 +59,7 @@ async function inputs(paramsFile: string) {
     if (!params.anchorBlocksSource) throw new Error("missing trusted anchor block mapping");
     anchorBytes = await readSource(params.anchorBlocksSource, base);
   }
-  return { params, paramsBytes, evidenceBytes, credentialBytes, anchorBytes,
+  return { params, paramsBytes, evidenceBytes, credentialBytes, anchorBytes, live,
     pages, credentials: JSON.parse(credentialBytes.toString()) as CredentialList,
     anchorBlocks: JSON.parse(anchorBytes.toString()) as Record<string, number> };
 }
@@ -47,8 +67,8 @@ function resultFor(i: Awaited<ReturnType<typeof inputs>>) {
   const evidence = verifyEvidence(i.pages, i.params.eventId, i.params.snapshot.cutoffBlock, i.anchorBlocks);
   return { evidence, evaluation: evaluateRule(i.params, evidence, i.credentials) };
 }
-async function evaluate(paramsFile: string, out: string) {
-  const i = await inputs(paramsFile), { evidence, evaluation } = resultFor(i);
+async function evaluate(paramsFile: string, out: string, rpcSource?: string, startBlock = 0) {
+  const i = await inputs(paramsFile, rpcSource, startBlock), { evidence, evaluation } = resultFor(i);
   const dir = resolve(out);
   await mkdir(join(dir, "inputs"), { recursive: true });
   await Promise.all([
@@ -79,7 +99,9 @@ async function evaluate(paramsFile: string, out: string) {
     outputDigests: { eligible: digestBytes(Buffer.from(JSON.stringify(eligible))),
       rejected: digestBytes(Buffer.from(JSON.stringify(rejected))) },
     trust: { credentialsPublicKey: i.params.credentialsPublicKey,
-      anchorBlockMapping: "supplied sidecar; compare against chain before settlement" },
+      anchorBlockMapping: i.live
+        ? "registered operator ObservationCommitmentRecorded events; independently compare against chain before settlement"
+        : "supplied sidecar; compare against chain before settlement" },
   };
   const manifestPath = join(dir, "manifest.json");
   await writeJson(manifestPath, manifest);
@@ -338,11 +360,11 @@ async function progress(paramsFile: string, key: string, pendingArg?: string) {
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const a = argsOf(rest);
-  if (command === "evaluate" && a.params && a.out) await evaluate(a.params, a.out);
-  else if (command === "verify" && a.manifest) process.exitCode = await verify(a.manifest, a.rpc, a.contract, trustedChain(a));
+  if (command === "evaluate" && a.params && a.out) await evaluate(a.params, a.out, a.rpc, fromBlock(a["from-block"]));
+  else if (command === "verify" && a.manifest) process.exitCode = await verify(a.manifest, rpcUrl(a.rpc), a.contract, trustedChain(a));
   else if (command === "progress" && a.params && a.key)
     process.exitCode = await progress(a.params, a.key, a.pending);
-  else throw new Error("usage: mizar evaluate --params p.json --out dir | verify --manifest path [--rpc url --contract addr --trusted-params p.json [--trusted-params-sha256 hex] --chain-id n [--from-block n] --event-registry addr --definition-registry addr --commitment-registry addr [--credentials-source src]] | progress --params p.json --key addr");
+  else throw new Error("usage: mizar evaluate --params p.json --out dir [--rpc url|env:NAME --from-block n] | verify --manifest path [--rpc url|env:NAME --contract addr --trusted-params p.json [--trusted-params-sha256 hex] --chain-id n [--from-block n] --event-registry addr --definition-registry addr --commitment-registry addr [--credentials-source src]] | progress --params p.json --key addr");
 }
 main().catch(error => {
   const reason = error instanceof Error ? error.message : String(error);
