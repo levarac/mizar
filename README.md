@@ -36,7 +36,7 @@ Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` in
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
 
-The claim page configuration is still an example. Alcor's example bindings do not enable a live World check. Passing local tests does not establish a deployed or working live join-to-claim flow.
+The Alcor Worker is deployed in World ID staging. The claim page is still pending deployment, and no live World ID proof or app callback has been verified yet. Passing local tests does not establish a working live join-to-claim flow.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia; Alcor and the claim page are still pending deployment. The local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging; the claim page is still pending deployment. The local E2E run substitutes Anvil and MockEAS. The app itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -112,9 +112,12 @@ The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `111
 | Root poster / event registrar | [0xdf6986bbadd189309d52d437851c10e47ca02e20](https://sepolia.etherscan.io/address/0xdf6986bbadd189309d52d437851c10e47ca02e20) |
 | Event registration transaction | [0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b](https://sepolia.etherscan.io/tx/0x72b70349f03dc5bf004c52c0b9c524643209e0ea7625bdfa7716dd07bbe69f4b) |
 | Event window (UTC) | `2026-09-26T05:30:00Z` to `2026-09-27T15:00:00Z` |
-| World ID action | `mizar-ccb8770a` |
-| Alcor credential public key | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` |
-| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployment pending |
+| World ID environment / action | `staging` / `mizar-ccb8770a` |
+| Alcor attestation public key / Mizar `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` for the demo event |
+| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployed |
+| Alcor Cloudflare Worker version | `a2e9f0ea-d530-44d7-85a8-ebe2b640acee` |
+| Alcor deployment source | [2215b2a84dae84fb7cfbda446f552a1572cd44c7](https://github.com/levarac/alcor/commit/2215b2a84dae84fb7cfbda446f552a1572cd44c7), now integrated into Alcor `main` |
+| Alcor D1 database | `alcor-human-check` |
 | Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
 | Public root / claim transaction | Pending a live run |
 
@@ -199,7 +202,7 @@ pnpm typecheck
 
 If a parent directory contains a pnpm workspace, add `--ignore-workspace` to the Alcor Worker install.
 
-The tests use local Miniflare D1 and an injected World verification client. The proof fixtures are documentation-shaped mocks, not captured live World proofs. See [Alcor's Worker README](https://github.com/levarac/alcor/blob/7909844bc76c74f35b5266f6849ff744dd84d453/worker/README.md) for the live configuration still required.
+The tests use local Miniflare D1 and an injected World verification client. The proof fixtures are documentation-shaped mocks, not captured live World proofs. See [Alcor's Worker README](https://github.com/levarac/alcor/blob/7909844bc76c74f35b5266f6849ff744dd84d453/worker/README.md) for the configuration interface at that tested revision. The deployment record above is separate from these historical local checks.
 
 ### Observed local results
 

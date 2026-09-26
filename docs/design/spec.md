@@ -49,12 +49,14 @@ The live demo uses these deployment parameters; the `snapshot.id` and `cutoffBlo
 | Claim contract | `0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC` |
 | EAS schema UID | `0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3` |
 | Root poster / event registrar | `0xdf6986bbadd189309d52d437851c10e47ca02e20` |
-| World ID action | `mizar-ccb8770a` |
-| Alcor `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` |
-| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployment pending |
+| World ID environment / action | `staging` / `mizar-ccb8770a` |
+| Alcor attestation public key / Mizar `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` for the demo event |
+| Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployed |
 | Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
 
 The [contract deployment record](../../contracts/README.md#sepolia-deployment) includes the source commit, transactions and source verification. The configured poster is the event registrar; this is a constructor setting, not a registry lookup performed by the claim contract.
+
+Alcor runs as Cloudflare Worker version `a2e9f0ea-d530-44d7-85a8-ebe2b640acee`, deployed from [2215b2a84dae84fb7cfbda446f552a1572cd44c7](https://github.com/levarac/alcor/commit/2215b2a84dae84fb7cfbda446f552a1572cd44c7), now integrated into Alcor `main`, with D1 database `alcor-human-check`. No live World ID proof or app callback has been verified yet.
 
 **Credential list** (published by the human-check service): one entry per credentialed event key. Each entry holds:
 
@@ -151,7 +153,7 @@ Tests (Foundry):
 - `POST /verify {eventId, eventKey, challenge, idkitResult}` looks up the exact bound `(eventId, eventKey, challenge)` row, rejects an expired or already consumed challenge both before and after World verification, compares the proof's signal with that row's signal, then requires `idkitResult.signal_hash == hashSignal(signal)` using the pinned `@worldcoin/idkit-core` hashing helper, then forwards the IDKit result to World's verify endpoint for this app's `rp_id` and action `mizar-<eventId prefix>`. It checks the signal, enforces one key per nullifier, stores the credential entry and signs it.
 - `GET /credentials?eventId=` returns the published credential list, including proof digests.
 
-Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_RP_SIGNING_KEY`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. Until then, tests use recorded fixtures and the staging simulator.
+Configuration comes from environment bindings: `WORLD_APP_ID`, `WORLD_RP_ID`, `WORLD_RP_SIGNING_KEY`, `WORLD_ACTION`, `WORLD_ENV=staging|production`, a signing key for attestations, and D1 storage. The World Developer Portal registration is done by a maintainer. The deployed demo uses World ID staging; automated tests use mocked proof inputs and do not establish successful live proof verification.
 
 ## Pages
 
