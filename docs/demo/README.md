@@ -71,11 +71,12 @@ shasum -a 256 'docs/demo/snapshots/0xccb8770a/<SNAPSHOT_ID>/params.json'
 ```
 
 The complete file must equal the baseline plus **only** `snapshot.id`,
-`snapshot.cutoffBlock`, and `snapshot.cutoffTimestamp`. From the repository root,
-this check prints `true` and exits 0 only when that relation holds:
+`snapshot.cutoffBlock`, and `snapshot.cutoffTimestamp`, each a non-negative integer.
+From the repository root, this check prints `true` and exits 0 only when that
+relation and the value requirements hold:
 
 ```sh
-jq -e --slurpfile baseline docs/demo/params-0xccb8770a.json 'del(.snapshot) == $baseline[0] and (.snapshot | keys == ["cutoffBlock", "cutoffTimestamp", "id"])' 'docs/demo/snapshots/0xccb8770a/<SNAPSHOT_ID>/params.json'
+jq -e --slurpfile baseline docs/demo/params-0xccb8770a.json 'del(.snapshot) == $baseline[0] and (.snapshot | keys == ["cutoffBlock", "cutoffTimestamp", "id"]) and all(.snapshot[]; if type == "number" then . >= 0 and . == floor else false end)' 'docs/demo/snapshots/0xccb8770a/<SNAPSHOT_ID>/params.json'
 ```
 
 Record that complete file's own digest and this baseline's digest in the adjacent
