@@ -83,6 +83,18 @@ describe("fixture evidence and evaluation", () => {
     expect(() => verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, {}))
       .toThrow("missing trusted anchor block mapping");
   });
+  it("checks the commitment chain on a single page", () => {
+    const [original] = structuredClone(pages);
+    const broken = structuredClone(original);
+    broken.commitments.push(structuredClone(original.commitments[0]));
+    expect(() => verifyEvidence([broken], params.eventId, params.snapshot.cutoffBlock, anchors))
+      .toThrow("commitment anchor chain mismatch");
+    const late = structuredClone(original);
+    late.commitments[0].anchor.sequence = 2;
+    late.commitments[0].anchor.previousCommitmentDigest = "11".repeat(32);
+    expect(() => verifyEvidence([late], params.eventId, params.snapshot.cutoffBlock, anchors))
+      .toThrow("commitment anchor chain mismatch");
+  });
   it("reassembles inner observation continuation before checking the commitment", () => {
     const [original] = structuredClone(pages);
     const first = structuredClone(original), second = structuredClone(original);
@@ -155,7 +167,7 @@ describe("Alcor credentials", () => {
     const canonical = (value: unknown): string => {
       if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
       if (value && typeof value === "object")
-        return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b))
+        return `{${Object.entries(value).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
           .map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(",")}}`;
       return JSON.stringify(value);
     };
@@ -240,6 +252,8 @@ describe("CLI receipt", () => {
       const manifestPath = join(out, "manifest.json");
       const evaluatedReceipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
       expect(evaluatedReceipt.manifestDigest).toBe("0x" + hex(sha(readFileSync(manifestPath))));
+      expect(evaluatedReceipt.root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
+      expect(evaluatedReceipt.manifestDigest).toBe("0x1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a");
       expect(run("verify", "--manifest", manifestPath).stdout).toContain('"result":"PASS"');
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       manifest.root = manifest.root.slice(0, -1) + (manifest.root.endsWith("0") ? "1" : "0");
@@ -251,36 +265,75 @@ describe("CLI receipt", () => {
       writeFileSync(manifestPath, JSON.stringify(manifest));
       const inputPath = join(out, "inputs/credentials.json");
       const input = readFileSync(inputPath);
-      input[input.indexOf(Buffer.from("signature")) + 12] ^= 1;
+      // Flip one bit of the first hex digit after `"signature": "0x`.
+      const at = input.indexOf(Buffer.from('"signature": "0x')) + 16;
+      input[at] = (parseInt(String.fromCharCode(input[at]), 16) ^ 1).toString(16).charCodeAt(0);
       writeFileSync(inputPath, input);
       const badInput = run("verify", "--manifest", manifestPath);
       expect(badInput.status).toBe(1);
       expect(badInput.stdout).toContain('"fault":"invalid_signature"');
+      // Re-seal the input digest so verify reaches the signature check itself.
+      manifest.inputs.credentials.sha256 = hex(sha(input));
+      writeFileSync(manifestPath, JSON.stringify(manifest));
+      const resealed = run("verify", "--manifest", manifestPath);
+      expect(resealed.status).toBe(1);
+      expect(resealed.stdout).toContain('"fault":"invalid_signature"');
+      expect(resealed.stdout).toContain("verification failures differ from the manifest");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 30_000);
-  it("compares root, manifestDigest and cutoffBlock with a fixture RootPosted event", async () => {
+  it("checks RootPosted and registry anchors against a fixture JSON-RPC stub", async () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
-    let posted = { root: "", manifestDigest: "", cutoffBlock: params.snapshot.cutoffBlock };
-    let postedLogPresent = true;
-    // Offline JSON-RPC stub: answers only what verify needs to read one RootPosted log.
+    const registries = { eventRegistry: "0x00000000000000000000000000000000000000e1",
+      definitionRegistry: "0x00000000000000000000000000000000000000d1",
+      commitmentRegistry: "0x00000000000000000000000000000000000000a1" };
+    const [page] = pages, admission = page.admission, anchor = page.commitments[0].anchor;
+    const abi = AbiCoder.defaultAbiCoder(), word = (value: string | number) => zeroPadValue(toBeHex(value), 32);
+    const cutoff = params.snapshot.cutoffBlock;
+    let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
+    let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest], extraCommitment = false;
+    const log = (address: string, block: number, topics: string[], data: string) => ({
+      address, blockNumber: toBeHex(block), blockHash: "0x" + "11".repeat(32),
+      transactionHash: "0x" + "22".repeat(32), transactionIndex: "0x0", logIndex: "0x0", removed: false, topics, data });
+    // Offline JSON-RPC stub: serves the three registry events, the cutoff block and one RootPosted log.
+    const logsFor = (topic0: string) => {
+      if (topic0 === id("EventRegistered(bytes32,address,address,bytes32,uint64)"))
+        return [log(registries.eventRegistry, 10, [topic0, "0x" + page.context,
+          zeroPadValue("0x" + admission.anchorRegistration.registrar, 32),
+          zeroPadValue("0x" + admission.anchorRegistration.operator, 32)],
+        abi.encode(["bytes32", "uint64"], ["0x" + admission.anchorRegistration.keySetDigest,
+          admission.anchorRegistration.registeredAt]))];
+      if (topic0 === id("EventDefinitionAnchored(bytes32,uint64,bytes32,bytes32,uint64,uint64,uint64)")) {
+        const d = admission.definitionAnchor;
+        return [log(registries.definitionRegistry, 20, [topic0, "0x" + page.context, word(d.sequence),
+          "0x" + d.definitionDigest], abi.encode(["bytes32", "uint64", "uint64", "uint64"],
+          ["0x" + d.previousDefinitionDigest, d.validFrom, d.validUntil, d.anchoredAt]))];
+      }
+      if (topic0 === id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")) {
+        const commitment = (sequence: number, digest: string, previous: string, block: number) =>
+          log(registries.commitmentRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
+            abi.encode(["bytes32", "address", "uint64"], ["0x" + previous,
+              "0x" + admission.anchorRegistration.operator, anchor.committedAt]));
+        return [commitment(anchor.sequence, anchor.commitmentDigest, anchor.previousCommitmentDigest, anchorBlock),
+          ...(extraCommitment ? [commitment(2, "ab".repeat(32), anchor.commitmentDigest, cutoff - 5)] : [])];
+      }
+      return !postedLogPresent ? [] : [log(contract, cutoff + 5, [topic0, word(params.snapshot.id)],
+        abi.encode(["bytes32", "bytes32", "uint64"], [posted.root, posted.manifestDigest, posted.cutoffBlock]))];
+    };
     const server = createServer((req, res) => {
       let body = "";
       req.on("data", chunk => { body += chunk; });
       req.on("end", () => {
         const request = JSON.parse(body);
-        const answer = (r: { id: number; method: string }) => ({ jsonrpc: "2.0", id: r.id,
+        const answer = (r: { id: number; method: string; params: any[] }) => ({ jsonrpc: "2.0", id: r.id,
           result: r.method === "eth_chainId" ? toBeHex(params.chainId)
-            : r.method === "eth_blockNumber" ? toBeHex(params.snapshot.cutoffBlock + 10)
-            : r.method === "eth_getLogs" ? !postedLogPresent ? [] : [{
-              address: contract, blockNumber: toBeHex(params.snapshot.cutoffBlock + 5),
-              blockHash: "0x" + "11".repeat(32), transactionHash: "0x" + "22".repeat(32),
-              transactionIndex: "0x0", logIndex: "0x0", removed: false,
-              topics: [id("RootPosted(uint64,bytes32,bytes32,uint64)"),
-                zeroPadValue(toBeHex(params.snapshot.id), 32)],
-              data: AbiCoder.defaultAbiCoder().encode(["bytes32", "bytes32", "uint64"],
-                [posted.root, posted.manifestDigest, posted.cutoffBlock]),
-            }] : null });
+            : r.method === "eth_blockNumber" ? toBeHex(cutoff + 10)
+            : r.method === "eth_getBlockByNumber" ? {
+              number: r.params[0], hash: "0x" + "33".repeat(32), parentHash: "0x" + "44".repeat(32),
+              timestamp: toBeHex(params.snapshot.cutoffTimestamp), nonce: "0x0000000000000000",
+              difficulty: "0x0", gasLimit: "0x1c9c380", gasUsed: "0x0", baseFeePerGas: "0x1",
+              miner: "0x" + "00".repeat(20), extraData: "0x", transactions: [] }
+            : r.method === "eth_getLogs" ? logsFor(r.params[0].topics[0]) : null });
         res.setHeader("content-type", "application/json");
         res.end(JSON.stringify(Array.isArray(request) ? request.map(answer) : answer(request)));
       });
@@ -295,28 +348,67 @@ describe("CLI receipt", () => {
       child.on("close", status => done({ status, stdout }));
     });
     try {
-      const evaluated = await run("evaluate", "--params", "test/fixtures/params.json", "--out", out);
+      // Registry-less parameters leave the anchor sidecar unchecked: never PASS.
+      const plain = join(out, "plain");
+      expect((await run("evaluate", "--params", "test/fixtures/params.json", "--out", plain)).status).toBe(0);
+      const unbacked = await run("verify", "--manifest", join(plain, "manifest.json"), "--rpc", rpc, "--contract", contract);
+      expect(unbacked.status).toBe(2);
+      expect(unbacked.stdout).toContain('"result":"UNAVAILABLE"');
+      expect(unbacked.stdout).toContain("--commitment-registry");
+
+      const paramsFile = join(out, "params.json");
+      const fixtures = join(root, "test/fixtures");
+      writeFileSync(paramsFile, JSON.stringify({ ...params, ...registries,
+        evidenceSource: join(fixtures, "envelopes.json"), credentialsSource: join(fixtures, "credentials.json"),
+        anchorBlocksSource: join(fixtures, "anchor-blocks.json"), pendingSource: undefined }));
+      const result = join(out, "registry");
+      const evaluated = await run("evaluate", "--params", paramsFile, "--out", result);
       expect(evaluated.status).toBe(0);
-      const manifestPath = join(out, "manifest.json");
       const receipt = JSON.parse(evaluated.stdout.trim().split("\n").at(-1)!);
-      const verifyOnChain = () => run("verify", "--manifest", manifestPath, "--rpc", rpc, "--contract", contract);
-      posted = { root: receipt.root, manifestDigest: receipt.manifestDigest, cutoffBlock: params.snapshot.cutoffBlock };
+      const trust = (overrides: Record<string, string> = {}) => Object.entries({ "chain-id": String(params.chainId),
+        "event-registry": registries.eventRegistry, "definition-registry": registries.definitionRegistry,
+        "commitment-registry": registries.commitmentRegistry, ...overrides }).flatMap(([k, v]) => ["--" + k, v]);
+      const verifyOnChain = (overrides: Record<string, string> = {}) => run("verify", "--manifest",
+        join(result, "manifest.json"), "--rpc", rpc, "--contract", contract, ...trust(overrides));
+      const good = { root: receipt.root, manifestDigest: receipt.manifestDigest, cutoffBlock: cutoff };
+      posted = good;
       const pass = await verifyOnChain();
       expect(pass.stdout).toContain('"result":"PASS"');
       expect(pass.status).toBe(0);
+      const wrongChain = await verifyOnChain({ "chain-id": "1" });
+      expect(wrongChain.status).toBe(2);
+      expect(wrongChain.stdout).toContain("is not the trusted chain ID 1");
+      // A poster-chosen registry in the params cannot replace the verifier's own.
+      const otherRegistry = await verifyOnChain({ "commitment-registry": "0x00000000000000000000000000000000000000a2" });
+      expect(otherRegistry.status).toBe(1);
+      expect(otherRegistry.stdout).toContain('"fault":"root_mismatch"');
+      expect(otherRegistry.stdout).toContain("different commitmentRegistry");
       const flip = (value: string) => value.slice(0, -1) + (parseInt(value.slice(-1), 16) ^ 1).toString(16);
       for (const [change, reason] of [
         [{ manifestDigest: flip(receipt.manifestDigest) }, "manifest_digest_mismatch"],
-        [{ cutoffBlock: params.snapshot.cutoffBlock + 1 }, "cutoff_block_mismatch"],
+        [{ cutoffBlock: cutoff + 1 }, "cutoff_block_mismatch"],
         [{ root: flip(receipt.root) }, undefined],
       ] as const) {
-        posted = Object.assign({ root: receipt.root, manifestDigest: receipt.manifestDigest,
-          cutoffBlock: params.snapshot.cutoffBlock }, change);
+        posted = Object.assign({ ...good }, change);
         const failed = await verifyOnChain();
         expect(failed.status).toBe(1);
         expect(failed.stdout).toContain('"fault":"root_mismatch"');
         if (reason) expect(failed.stdout).toContain(reason);
       }
+      posted = good;
+      // The sidecar says block 90; the registry anchored the commitment after the cutoff.
+      anchorBlock = cutoff + 1;
+      const moved = await verifyOnChain();
+      expect(moved.status).toBe(1);
+      expect(moved.stdout).toContain('"fault":"root_mismatch"');
+      expect(moved.stdout).toContain("archived anchor block mapping differs from chain");
+      anchorBlock = anchors[anchor.commitmentDigest];
+      extraCommitment = true;
+      const omitted = await verifyOnChain();
+      expect(omitted.status).toBe(1);
+      expect(omitted.stdout).toContain('"fault":"root_mismatch"');
+      expect(omitted.stdout).toContain("commitment anchored before cutoff missing from evidence");
+      extraCommitment = false;
       postedLogPresent = false;
       const missing = await verifyOnChain();
       expect(missing.status).toBe(2);
@@ -326,5 +418,5 @@ describe("CLI receipt", () => {
       server.close();
       rmSync(out, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, 120_000);
 });

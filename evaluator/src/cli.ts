@@ -4,7 +4,7 @@ import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { evaluateRule, type CredentialList, type Parameters } from "./evaluate.js";
 import { verifyEvidence, type Envelope } from "./evidence.js";
 import { digestBytes, loadEnvelopes, readSource, sourcePath, writeJson } from "./io.js";
-import { checkAdmissionRegistries, readAnchorsFromRegistry, readPostedRoot } from "./chain.js";
+import { checkAdmissionRegistries, readAnchorsFromRegistry, readChainId, readPostedRoot } from "./chain.js";
 
 type Args = Record<string, string>;
 function argsOf(input: string[]): Args {
@@ -88,7 +88,15 @@ async function evaluate(paramsFile: string, out: string) {
     eligible: evaluation.eligible.length, rejected: evaluation.rejected.length,
     invalidObservations: evaluation.invalidObservations.length, manifestDigest, out: dir }));
 }
-async function verify(manifestPath: string, rpc?: string, contract?: string) {
+interface TrustedChain { chainId: number; eventRegistry: string; definitionRegistry: string; commitmentRegistry: string }
+function trustedChain(a: Args): TrustedChain | undefined {
+  const chainId = Number(a["chain-id"]);
+  if (!Number.isSafeInteger(chainId) || chainId <= 0 || !a["event-registry"] ||
+      !a["definition-registry"] || !a["commitment-registry"]) return undefined;
+  return { chainId, eventRegistry: a["event-registry"], definitionRegistry: a["definition-registry"],
+    commitmentRegistry: a["commitment-registry"] };
+}
+async function verify(manifestPath: string, rpc?: string, contract?: string, trusted?: TrustedChain) {
   const remote = manifestPath.startsWith("https://");
   const path = remote ? manifestPath : resolve(manifestPath);
   const dir = remote ? new URL(".", path).toString() : dirname(path);
@@ -117,6 +125,15 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
     const archiveMap = JSON.parse(anchorBytes.toString());
     const evidence = verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, archiveMap);
     const evaluation = evaluateRule(params, evidence, JSON.parse(credentialBytes.toString()));
+    // Every observation and credential field is signed, so recomputed verification
+    // failures that the digest-bound rejected.json did not record are signature faults.
+    const recorded = JSON.parse((await readRelative("rejected.json")).toString());
+    if (digestBytes(Buffer.from(JSON.stringify(recorded))) === manifest.outputDigests?.rejected &&
+        (JSON.stringify(evaluation.invalidObservations) !== JSON.stringify(recorded.invalidObservations) ||
+         JSON.stringify(evaluation.invalidCredentials) !== JSON.stringify(recorded.invalidCredentials))) {
+      console.log(JSON.stringify({ result: "FAIL", fault: "invalid_signature",
+        reason: "verification failures differ from the manifest" })); return 1;
+    }
     if (evaluation.root.toLowerCase() !== String(manifest.root).toLowerCase()) {
       console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch" })); return 1;
     }
@@ -144,17 +161,44 @@ async function verify(manifestPath: string, rpc?: string, contract?: string) {
     }
     if (rpc || contract) {
       if (!rpc || !contract) throw new Error("both --rpc and --contract required");
-      if (params.eventRegistry && params.definitionRegistry)
-        await checkAdmissionRegistries(rpc, params.chainId, params.eventRegistry,
-          params.definitionRegistry, params.eventId, params.snapshot.cutoffBlock, pages);
-      if (params.commitmentRegistry) {
-        const chain = await readAnchorsFromRegistry(rpc, params.commitmentRegistry,
-          params.eventId, params.chainId, params.snapshot.cutoffBlock, pages);
-        if (JSON.stringify(chain.mapping) !== JSON.stringify(archiveMap) ||
-            chain.cutoffTimestamp !== params.snapshot.cutoffTimestamp)
-          throw new Error("archived anchor block mapping differs from chain");
+      // The params file is written by the poster, so the chain and the registries that
+      // back the anchor sidecar and cutoff timestamp must come from the verifier.
+      if (!trusted) {
+        console.log(JSON.stringify({ result: "UNAVAILABLE", reason:
+          "on-chain verification requires trusted --chain-id, --event-registry, --definition-registry and --commitment-registry" }));
+        return 2;
       }
-      const posted = await readPostedRoot(rpc, contract, params.chainId,
+      const rpcChain = await readChainId(rpc);
+      if (rpcChain !== trusted.chainId) {
+        console.log(JSON.stringify({ result: "UNAVAILABLE",
+          reason: `RPC chain ID ${rpcChain} is not the trusted chain ID ${trusted.chainId}` }));
+        return 2;
+      }
+      const named = { chainId: params.chainId, eventRegistry: params.eventRegistry,
+        definitionRegistry: params.definitionRegistry, commitmentRegistry: params.commitmentRegistry };
+      for (const [field, value] of Object.entries(named)) {
+        const expected = trusted[field as keyof typeof trusted];
+        if (value !== undefined && String(value).toLowerCase() !== String(expected).toLowerCase()) {
+          console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch",
+            reason: `parameters name a different ${field} than the trusted one` })); return 1;
+        }
+      }
+      try {
+        await checkAdmissionRegistries(rpc, trusted.chainId, trusted.eventRegistry,
+          trusted.definitionRegistry, params.eventId, params.snapshot.cutoffBlock, pages);
+        const chain = await readAnchorsFromRegistry(rpc, trusted.commitmentRegistry,
+          params.eventId, trusted.chainId, params.snapshot.cutoffBlock, pages);
+        const sorted = (m: Record<string, number>) => JSON.stringify(Object.entries(m).sort());
+        if (sorted(chain.mapping) !== sorted(archiveMap))
+          throw new Error("archived anchor block mapping differs from chain");
+        if (chain.cutoffTimestamp !== params.snapshot.cutoffTimestamp)
+          throw new Error("cutoff timestamp differs from chain");
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        if (!/differs from chain|missing from evidence|not backed by registry/.test(reason)) throw error;
+        console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch", reason })); return 1;
+      }
+      const posted = await readPostedRoot(rpc, contract, trusted.chainId,
         params.snapshot.id, params.snapshot.cutoffBlock);
       if (posted.cutoffBlock !== params.snapshot.cutoffBlock) {
         console.log(JSON.stringify({ result: "FAIL", fault: "root_mismatch",
@@ -216,14 +260,14 @@ async function main() {
   const [command, ...rest] = process.argv.slice(2);
   const a = argsOf(rest);
   if (command === "evaluate" && a.params && a.out) await evaluate(a.params, a.out);
-  else if (command === "verify" && a.manifest) process.exitCode = await verify(a.manifest, a.rpc, a.contract);
+  else if (command === "verify" && a.manifest) process.exitCode = await verify(a.manifest, a.rpc, a.contract, trustedChain(a));
   else if (command === "progress" && a.params && a.key)
     process.exitCode = await progress(a.params, a.key, a.pending);
-  else throw new Error("usage: mizar evaluate --params p.json --out dir | verify --manifest path [--rpc url --contract addr] | progress --params p.json --key addr");
+  else throw new Error("usage: mizar evaluate --params p.json --out dir | verify --manifest path [--rpc url --contract addr --chain-id n --event-registry addr --definition-registry addr --commitment-registry addr] | progress --params p.json --key addr");
 }
 main().catch(error => {
   const reason = error instanceof Error ? error.message : String(error);
-  if (/live snapshot requires|commitment anchor not backed|cutoff block unavailable|registration unavailable|definition anchor unavailable|fetch failed|network/i.test(reason))
+  if (/live snapshot requires|missing trusted anchor block mapping|commitment anchor not backed|cutoff block unavailable|registration unavailable|definition anchor unavailable|fetch failed|network/i.test(reason))
     console.log(JSON.stringify({ result: "UNAVAILABLE", reason }));
   else console.error(reason);
   process.exitCode = 2;

@@ -41,11 +41,27 @@ inputs and derived mapping under the output directory for offline replay.
 
 `verify` recomputes the root and the sorted eligibility, rejection, and proof
 outputs from the archived inputs. Without `--rpc` it compares with the
-manifest root. With both `--rpc` and `--contract` it also checks the claim
-contract's `RootPosted` event, including its root, cutoff block, and SHA-256
-of the exact written manifest bytes. For a live-origin manifest it rechecks
-the registry mappings. The contract's snapshots are private, so the event is
-the public read surface.
+manifest root; the anchor-to-block sidecar and cutoff timestamp are then taken
+from the archive as written. With `--rpc` and `--contract` it checks the chain:
+
+```sh
+pnpm mizar verify --manifest dir/manifest.json --rpc <url> --contract <claim> \
+  --chain-id 11155111 --event-registry <addr> --definition-registry <addr> \
+  --commitment-registry <addr>
+```
+
+The chain ID and the three registry addresses must come from the verifier,
+not from the poster-written parameters. This repository does not pin the
+evidence layer's Sepolia registry addresses, so without these flags an
+on-chain verify returns `UNAVAILABLE`. Registry values in the parameters are
+only cross-checked against the flags; a difference is a `FAIL`. The verifier
+then rechecks the event registration and definition anchor, maps every
+commitment to its registry block, requires every commitment anchored at or
+before the cutoff to be in the inputs, and compares the cutoff block
+timestamp. Finally it reads the claim contract's `RootPosted` event and
+compares its root, cutoff block, and SHA-256 of the exact written manifest
+bytes. The contract's snapshots are private, so the event is the public read
+surface.
 
 The public verification-envelope API currently returns `bundle: null`. It
 cannot expose bundled delegation certificates or support recomputation of the

@@ -71,7 +71,14 @@ export async function readAnchorsFromRegistry(rpcUrl: string, registry: string,
       throw new Error("commitment anchor not backed by registry event");
     mapping[digest] = record.block;
   }
+  for (const [digest, record] of records)
+    if (record.block <= cutoffBlock && !(digest in mapping))
+      throw new Error("commitment anchored before cutoff missing from evidence");
   return { mapping, cutoffTimestamp: block.timestamp };
+}
+export async function readChainId(rpcUrl: string): Promise<number> {
+  const provider = new JsonRpcProvider(rpcUrl);
+  try { return Number((await provider.getNetwork()).chainId); } finally { provider.destroy(); }
 }
 export async function readPostedRoot(rpcUrl: string, contract: string, chainId: number,
   snapshotId: number, cutoffBlock: number) {
