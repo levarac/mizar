@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Levarac: try Mizar and Alcor</title>
-<meta name="description" content="Levarac at ETHGlobal Tokyo 2026. Mizar makes eligibility recomputable from published inputs: signed mutual encounters between human-checked phones, a fixed N/B rule, a snapshot root on Sepolia and individual EAS claims.">
+<meta name="description" content="Levarac at ETHGlobal Tokyo 2026. Mizar makes eligibility recomputable from published inputs: signed mutual encounters between human-checked phones, a fixed N/B rule, a snapshot root to be posted on Sepolia and individual EAS claims.">
 <meta name="theme-color" content="#FEFFFB">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Levarac: try Mizar and Alcor">
@@ -226,8 +226,8 @@
         <rect x="12" y="70" width="16" height="12" class="ln"/><rect x="52" y="70" width="16" height="12" class="ln"/><rect x="80" y="70" width="16" height="12" class="ln"/><rect x="120" y="70" width="16" height="12" class="ln"/>
       </svg>
       <p class="step-n mono">04</p>
-      <h3>A snapshot root on Sepolia</h3>
-      <p>The evaluator writes a manifest, the eligible list and Merkle proofs. The configured root poster can post the root, the manifest's SHA-256 digest and a cutoff block to the claim contract.</p>
+      <h3>Posting a snapshot root on Sepolia</h3>
+      <p>The evaluator writes a manifest, the eligible list and Merkle proofs. Once a snapshot is taken, the configured root poster posts its root, the manifest's SHA-256 digest and a cutoff block to the claim contract.</p>
     </li>
     <li class="step">
       <svg class="step-art" viewBox="0 0 160 96" aria-hidden="true">
@@ -239,10 +239,10 @@
       </svg>
       <p class="step-n mono">05</p>
       <h3>Claim to your own wallet</h3>
-      <p>You choose a recipient wallet and Beid signs for it. The contract checks membership and the signature, allows one claim per event key and issues a non-revocable EAS attestation. Each claim is its own transaction.</p>
+      <p>Once a snapshot root is posted, a claim checks against it. You choose a recipient wallet and Beid signs for it. The contract checks membership and the signature, allows one claim per event key and issues a non-revocable EAS attestation. Each claim is its own transaction.</p>
     </li>
   </ol>
-  <p class="after-steps">Anyone with the published inputs can rerun the evaluator and compare its result with a posted root.</p>
+  <p class="after-steps">Once a snapshot root is posted, anyone with the published inputs can rerun the evaluator and compare the result with that root.</p>
 </section>
 
 <section id="components" class="band" aria-labelledby="comp-title">
