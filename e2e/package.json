@@ -1,0 +1,16 @@
+{
+  "name": "@levarac/mizar-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "e2e": "node run.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@openzeppelin/merkle-tree": "^1.0.8",
+    "ethers": "^6.15.0"
+  }
+}

@@ -1,0 +1,2 @@
+# Standalone workspace so pnpm does not join a parent workspace.
+allowBuilds: {}
