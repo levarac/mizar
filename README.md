@@ -25,18 +25,20 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` included in this branch. Links in the components table pin the inspected code. The evaluator was integrated at `787e9b6`, followed by live anchor-to-block mapping and a trusted-parameter guard fix; the claim page includes the verified-callback storage fix. The E2E runner was integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
+Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `a798d1b` included in this branch. Links in the components table pin the inspected code. The evaluator was integrated at `787e9b6`, followed by live anchor-to-block mapping and a trusted-parameter guard fix; the claim page includes the verified-callback storage fix, camera-ready design and read-only rule card. The E2E runner was integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
 | Claim contract | [contracts/](https://github.com/levarac/mizar/tree/b755abcbdcf7bf61a1ee7f8f93b07695fd1317f7/contracts) | `b755abc`, `main` | Snapshot roots, event-key authorization, one-time claims and EAS issuance |
 | Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/bf91f6658980019d502993f6e33720cd39f11006/evaluator) | `bf91f66`, `main`; initial `feat/evaluator` integration at `787e9b6` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
-| Claim page | [web/](https://github.com/levarac/mizar/tree/bf91f6658980019d502993f6e33720cd39f11006/web) | `bf91f66`, `main`; initial `feat/claim-page` integration at `b755abc` | Recipient entry, verified app callback, eligibility/proof loading and wallet submission |
+| Claim page | [web/](https://github.com/levarac/mizar/tree/a798d1b941633f9d3014d915f72ebb930c4be1fc/web) | `a798d1b`, `main`; initial `feat/claim-page` integration at `b755abc` | Recipient entry, verified app callback, eligibility/proof loading, wallet submission and a read-only rule card |
 | E2E fixture run | [e2e/](https://github.com/levarac/mizar/tree/c9c7f1d5476dbe523ada877a84b81db1d86d26a1/e2e) | `c9c7f1d`, `feat/e2e-fixture-run`; integrated into `main` at `2530658` | Evaluator-to-claim rehearsal on local Anvil with MockEAS |
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
 
-The Alcor service is deployed in World ID staging. The claim page is still pending deployment, and no live World ID proof or app callback has been verified yet. The claim page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
+The Alcor service is deployed in World ID staging. On **2026-09-26**, a real World ID staging proof was verified end to end against the deployed service: one credential was issued, and a second event key using the same World ID was rejected with `409 credential_already_exists`. See the [live service verification record](https://github.com/levarac/alcor/issues/1#issuecomment-5844855062). **An app callback on a real phone and a live claim remain unverified.**
+
+The claim page's camera-ready design and read-only rule card are merged at `a798d1b`. The card loads the published parameters by URL and verifies their SHA-256 before displaying the rule. Deployment remains pending the first non-empty snapshot. The page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
 
 ## Architecture
 
@@ -115,23 +117,25 @@ The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `111
 | World ID environment / action | `staging` / `mizar-ccb8770a` |
 | Alcor attestation public key / Mizar `credentialsPublicKey` | `0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057` for the demo event |
 | Alcor service and join page | [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/) — deployed |
-| Alcor Cloudflare Worker version | `a2e9f0ea-d530-44d7-85a8-ebe2b640acee` |
-| Alcor deployment source | [2215b2a84dae84fb7cfbda446f552a1572cd44c7](https://github.com/levarac/alcor/commit/2215b2a84dae84fb7cfbda446f552a1572cd44c7), now integrated into Alcor `main` |
+| Previously recorded Alcor Cloudflare Worker version | `a2e9f0ea-d530-44d7-85a8-ebe2b640acee` |
+| Previously recorded Alcor deployment source | [2215b2a84dae84fb7cfbda446f552a1572cd44c7](https://github.com/levarac/alcor/commit/2215b2a84dae84fb7cfbda446f552a1572cd44c7), now integrated into Alcor `main` |
 | Alcor D1 database | `alcor-human-check` |
-| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployment pending |
-| Public root / claim transaction | Pending the first snapshot and a live run |
+| Live World ID staging verification | One credential issued; second event key with the same World ID rejected with `409 credential_already_exists` on 2026-09-26 |
+| Live Sepolia evaluation | Read-only rehearsal completed on 2026-09-26; 0 eligible, no root posted |
+| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — design and rule card merged; deployment pending the first non-empty snapshot |
+| Public root / claim transaction | Pending the first non-empty snapshot and a live claim |
 
 The root poster was configured to be the event registrar; the contract does not derive it from the registry. The existing evidence-layer registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
 
-The demo's [event-level parameter baseline](docs/demo/params-0xccb8770a.json) has exact-file SHA-256 `1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08`. It intentionally omits snapshot values and cannot be used alone as `--trusted-params`: before each snapshot, publish a complete file at `docs/demo/snapshots/0xccb8770a/<snapshotId>/params.json` with its own digest and immutable commit URL, as described in the [publication instructions](docs/demo/README.md). A verifier supplies that complete file or pinned URL to `verify --rpc --trusted-params` and its own digest to `--trusted-params-sha256`; the baseline digest does not pin a later snapshot file.
+The demo's [event-level parameter baseline](docs/demo/params-0xccb8770a.json) was published before any snapshot and merged at `c5fd44f` on **2026-09-26**, with exact-file SHA-256 `1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08`. It intentionally omits snapshot values and cannot be used alone as `--trusted-params`. See the [publication instructions](docs/demo/README.md) for each snapshot's complete parameter file, independent digest and verification command.
 
-The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. The [deployment record and instructions](contracts/README.md#sepolia-deployment) are separate from the local checks below. This documentation update records an existing deployment; neither script was broadcast during the update, and it does not establish a successful live evaluation, claim or join-to-claim flow.
+The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:RegisterSchema`](contracts/script/RegisterSchema.s.sol) and [`contracts/script/Deploy.s.sol:Deploy`](contracts/script/Deploy.s.sol). The former registers `bytes32 eventId, address eventKey, uint64 snapshotId, bytes32 manifestDigest` with no resolver and `revocable = false`; the latter deploys the claim contract. The [deployment record and instructions](contracts/README.md#sepolia-deployment) are separate from the local checks below. This documentation update records an existing deployment; neither script was broadcast during the update. Deployment alone does not establish a successful live claim or join-to-claim flow.
 
 ## Local build and verification
 
-Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator, claim-page and E2E commands run from a Mizar checkout containing `main` revision `bf91f66`, including this branch. Each block starts from its repository root. Alcor uses its own repository.
+Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator, claim-page and E2E commands run from a Mizar checkout containing `main` revision `a798d1b`, including this branch. Each block starts from its repository root. Alcor uses its own repository.
 
-For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout bf91f66`. The evaluator and E2E runner no longer need separate feature-branch checkouts.
+For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout a798d1b`. The evaluator and E2E runner no longer need separate feature-branch checkouts.
 
 ### Contract
 
@@ -156,11 +160,11 @@ pnpm mizar verify --manifest /tmp/mizar-readme-out-latest/manifest.json
 
 The checked-in inputs contain synthetic observations, credentials and anchor mappings. Their public deterministic test keys are not event credentials. Offline `PASS` establishes consistency with the poster-supplied archive, including its parameters, credential list and block mapping; it does not prove that those inputs are complete or that a root or input was anchored on Sepolia.
 
-### Evaluator: live path, tested with a stub only
+### Evaluator: live read-only rehearsal
 
 For HTTPS evidence, `evaluate` requires the event, definition and commitment registry addresses and an RPC endpoint. Pass the endpoint with `--rpc env:SEPOLIA_RPC_URL`, supplied through a command-scoped environment variable, to keep it out of command arguments and archived parameters. `--from-block` must include all relevant registration, definition and commitment events. Only commitments recorded by the event's registered operator supply the block mapping; a missing matching event returns `UNAVAILABLE`. Commitments after the cutoff are mapped but excluded from that snapshot's eligibility calculation.
 
-The evaluator's automated suite exercises this live evaluation path against a local JSON-RPC stub only. **No live Sepolia evaluation has been run yet.** The [evaluator README](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/evaluator/README.md) records the coverage and the unavailable evidence endpoint. These newer tests were not rerun for this documentation update.
+The evaluator's automated suite exercises the live evaluation path against a local JSON-RPC stub. Separately, a [live read-only rehearsal](https://github.com/levarac/mizar/issues/5#issuecomment-5846030717) ran on **2026-09-26** at `455a96c` against Sepolia with cutoff block **11785805**. All **17 commitments** were mapped to registry event blocks: sequences **1–12** were used (**96 observations**), and **13–17** were excluded as after the cutoff. `evaluate` exited **0**, offline `verify` returned **PASS**, and a one-bit output mutation returned **FAIL**. There were **0 eligible keys** because no demo phone held a human-check credential at that time. **No root was posted.** These results do not establish a live claim or verification of a posted root. Builds, tests and the rehearsal were not rerun for this documentation update.
 
 Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`; `--rpc env:SEPOLIA_RPC_URL` is supported here too. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. The pinned `bf91f66` checkout includes the trusted-parameter guard fix. A local path inside the manifest's directory, or any URL on a remote manifest's origin, is refused as a trust source. Local paths are resolved and classified as the input reader resolves them, including symlink resolution for the archive check. This guard catches location mistakes; it does not establish the provenance of a copy kept elsewhere.
 
