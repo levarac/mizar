@@ -207,6 +207,8 @@ The Alcor integration above was checked at `feat/human-check-service` revision `
 
 Development used AI coding agents: Claude Code with Claude Opus, OpenAI Codex, Grok and Devin. The specifications and design decisions that directed the agents are in [docs/design/](docs/design/). Team members set the rule, design and scope, and reviewed each branch with a separate AI agent before integration.
 
+The [development prompts and planning artifacts](docs/process/) preserve sanitized implementation instructions, review checklists and corrections, with a mapping from each prompt to its component. They are historical instructions, not a record that every requested check passed.
+
 ## License
 
 [MIT](LICENSE).
