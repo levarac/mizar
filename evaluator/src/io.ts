@@ -60,16 +60,21 @@ export const inside = (root: string, child: string) => join(root, child);
 // The poster writes the archive, so a trusted file read from inside it is not trusted.
 // A remote archive's whole origin counts as inside: servers may map percent-encoded or
 // case-variant paths to the same file, so a path prefix cannot tell them apart.
-export async function insideArchive(source: string, archiveBase: string): Promise<boolean> {
-  const remoteSource = /^https:\/\//i.test(source), remoteArchive = /^https:\/\//i.test(archiveBase);
+// The target is resolved with sourcePath and classified exactly as readSource does, so
+// the guard checks the same file the verifier will read (an "HTTPS://" spelling is a
+// local relative path to both).
+export async function insideArchive(source: string, archiveBase: string,
+  readerBase = process.cwd()): Promise<boolean> {
+  const target = sourcePath(source, readerBase);
+  const remoteSource = target.startsWith("https://"), remoteArchive = archiveBase.startsWith("https://");
   if (remoteSource || remoteArchive)
-    return remoteSource && remoteArchive && new URL(source).origin === new URL(archiveBase).origin;
+    return remoteSource && remoteArchive && new URL(target).origin === new URL(archiveBase).origin;
   // Resolve symlinks through the nearest existing ancestor, so a file that does not
   // exist yet is compared on the same real path as the archive directory.
   const real = async (path: string): Promise<string> => {
     try { return await realpath(path); }
     catch { const parent = dirname(path); return parent === path ? path : join(await real(parent), basename(path)); }
   };
-  const inside = relative(await real(archiveBase), await real(resolve(source)));
+  const inside = relative(await real(archiveBase), await real(target));
   return !(inside === ".." || inside.startsWith(".." + sep) || isAbsolute(inside));
 }

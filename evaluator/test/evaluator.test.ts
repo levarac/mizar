@@ -219,6 +219,9 @@ describe("trusted-params guard", () => {
       expect(await insideArchive(join(archive, "inputs", "params.json"), archive)).toBe(true);
       expect(await insideArchive(join(archive, "..", "params.json"), archive)).toBe(false);
       expect(await insideArchive(archive + "-sibling/params.json", archive)).toBe(false);
+      // An uppercase scheme is a relative local path to the reader, so it is to the guard too.
+      expect(await insideArchive("HTTPS://../..params.json", archive, archive)).toBe(true);
+      expect(await insideArchive("HTTPS://../inputs/params.json", archive, join(archive, "inputs"))).toBe(true);
     } finally { rmSync(archive, { recursive: true, force: true }); }
     const base = "https://host.example/a/";
     for (const url of ["https://host.example/%61/inputs/params.json", "https://host.example/A/params.json",
