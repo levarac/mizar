@@ -4,7 +4,7 @@ Sanitized implementation prompt. The [shared constraints](../README.md#shared-co
 
 **Historical instruction:** this first version deliberately built a Merkle tree directly because the evaluator was not integrated yet. It was superseded by the evaluator-backed flow described in [the E2E review](11-e2e-review.md). It is not the current E2E design.
 
-The evaluator has since been integrated into Mizar `main` at `787e9b6`. The E2E snapshot at `c9c7f1d` still requires a separate checkout; see the [current setup instructions](../../../README.md#local-build-and-verification).
+The evaluator has since been integrated into Mizar `main` at `787e9b6`, and the evaluator-backed E2E runner at `2530658`; see the [current setup instructions](../../../README.md#local-build-and-verification).
 
 ## Task
 

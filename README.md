@@ -25,14 +25,14 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code. The evaluator is now integrated into Mizar `main` at `787e9b6` and included in this branch. The E2E runner still requires its separate branch checkout; Alcor is a separate repository.
+Source snapshot checked on **2026-09-26 JST**. Links in the components table pin the inspected code. The evaluator is now integrated into Mizar `main` at `787e9b6` and included in this branch. The E2E runner is integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
 | Claim contract | [contracts/](https://github.com/levarac/mizar/tree/b755abcbdcf7bf61a1ee7f8f93b07695fd1317f7/contracts) | `b755abc`, `main` | Snapshot roots, event-key authorization, one-time claims and EAS issuance |
 | Evaluator | [evaluator/](https://github.com/levarac/mizar/tree/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator) | `787e9b6`, `main`; integrated from `feat/evaluator` at `a7a94a3` | Evidence and credential checks, threshold rule, Merkle outputs and verification CLI |
 | Claim page | [web/](https://github.com/levarac/mizar/tree/68cd65e2424bc55572fdf1be36b02ac391a6cfd9/web) | `68cd65e`, `feat/claim-page`; integrated into `main` at `b755abc` | Recipient entry, typed app callback, eligibility/proof loading and wallet submission |
-| E2E fixture run | [e2e/](https://github.com/levarac/mizar/tree/c9c7f1d5476dbe523ada877a84b81db1d86d26a1/e2e) | `c9c7f1d`, `feat/e2e-fixture-run` | Evaluator-to-claim rehearsal on local Anvil with MockEAS |
+| E2E fixture run | [e2e/](https://github.com/levarac/mizar/tree/c9c7f1d5476dbe523ada877a84b81db1d86d26a1/e2e) | `c9c7f1d`, `feat/e2e-fixture-run`; integrated into `main` at `2530658` | Evaluator-to-claim rehearsal on local Anvil with MockEAS |
 | Alcor human-check service | [alcor/worker/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/worker) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | World verification, event-key binding, nullifier uniqueness and signed credential list |
 | Alcor join page | [alcor/web/](https://github.com/levarac/alcor/tree/7909844bc76c74f35b5266f6849ff744dd84d453/web) | `7909844`, `feat/human-check-service`; integrated into `main` at `b016899` | Challenge, app callback and IDKit 4 human check |
 
@@ -112,9 +112,9 @@ The exact preparation scripts are [`contracts/script/RegisterSchema.s.sol:Regist
 
 ## Local build and verification
 
-Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator and claim-page commands run from a Mizar checkout containing `main` revision `787e9b6`, including this branch. Each block starts from its repository root. Alcor uses its own repository. The E2E runner still needs a separate checkout at `c9c7f1d`, which includes its own evaluator revision; install and run that checkout together.
+Requirements: **Node.js 22+**, pnpm and Foundry (`forge`, `anvil`). Contract, evaluator, claim-page and E2E commands run from a Mizar checkout containing `main` revision `2530658`, including this branch. Each block starts from its repository root. Alcor uses its own repository.
 
-For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout 787e9b6`. The evaluator no longer needs a separate feature-branch checkout. Use `c9c7f1d` in a separate checkout for E2E.
+For a pinned Mizar checkout: `git clone https://github.com/levarac/mizar mizar`, then `git -C mizar checkout 2530658`. The evaluator and E2E runner no longer need separate feature-branch checkouts.
 
 ### Contract
 
@@ -141,7 +141,7 @@ The checked-in inputs contain synthetic observations, credentials and anchor map
 
 Live chain verification is a separate mode requiring `--rpc`, `--contract`, `--chain-id`, `--event-registry`, `--definition-registry`, `--commitment-registry` and `--trusted-params`. The verifier must independently choose the chain and registry addresses and obtain the parameters published before the snapshot from outside the manifest's archive. An archived parameters file is refused as a trust source.
 
-Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that valid credentials issued by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The organizer's parameters publication location and independent digest remain undecided.
+Optional flags are `--trusted-params-sha256` to check those parameters against an independently obtained digest, `--credentials-source` to override the Alcor list location in the trusted parameters, and `--from-block` to set a trusted lower bound for log reads (default 0). Verification checks that credential entries that verify and were verified by the cutoff are not omitted, rechecks evidence anchors and cutoff data, and compares the posted root and manifest digest. The organizer's parameters publication location and independent digest remain undecided.
 
 Missing or unavailable verifier-selected context produces `UNAVAILABLE`; invalid archive contents and checked archive mismatches produce `FAIL`. A mismatch between the verifier's parameter copy and its optional expected digest is `UNAVAILABLE`. See the [current evaluator README](https://github.com/levarac/mizar/blob/787e9b6a27d1f9645b5d7a7997c137b027f5ac86/evaluator/README.md) for the complete command and trust assumptions. Live chain verification was not run for this document.
 
