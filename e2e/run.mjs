@@ -137,7 +137,7 @@ async function main() {
   );
 
   console.log('installing evaluator dependencies');
-  execFileSync('pnpm', ['--dir', evaluatorDir, 'install'], { stdio: 'inherit' });
+  execFileSync('pnpm', ['--dir', evaluatorDir, 'install', '--frozen-lockfile'], { stdio: 'inherit' });
 
   const outDir = mkdtempSync(join(tmpdir(), 'mizar-e2e-eval-'));
   const evaluateOut = execFileSync(
