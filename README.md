@@ -25,7 +25,7 @@ Public inputs expose event keys and their observation relationships. Claiming cr
 
 ## Components and source revisions
 
-Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` included in this branch. Links in the components table pin the inspected code. The evaluator was integrated at `787e9b6`, followed by trusted-parameter and anchor-to-block mapping fixes; the claim page includes the verified-callback storage fix. The E2E runner was integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
+Source snapshot checked on **2026-09-26 JST**, with Mizar `main` at `bf91f66` included in this branch. Links in the components table pin the inspected code. The evaluator was integrated at `787e9b6`, followed by live anchor-to-block mapping and a trusted-parameter guard fix; the claim page includes the verified-callback storage fix. The E2E runner was integrated into Mizar `main` at `2530658`. Alcor is a separate repository.
 
 | Component | Source | Inspected revision / branch | Role |
 | --- | --- | --- | --- |
