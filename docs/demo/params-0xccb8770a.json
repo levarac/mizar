@@ -1,0 +1,14 @@
+{
+  "evaluatorVersion": "mizar-eval/1",
+  "eventId": "0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1",
+  "chainId": 11155111,
+  "minPartners": 2,
+  "minWindowsPerPartner": 2,
+  "credentialsPublicKey": "0xa5c6309b9109cb08f5a931984dcd97c182c780d8f940fb1e2abcca2e62f46057",
+  "evidenceSource": "https://parallax-observation-operator.levarac.workers.dev/v1/events/ccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1/verification",
+  "credentialsSource": "https://alcor-human-check.levarac.workers.dev/credentials?eventId=0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1",
+  "eventRegistry": "0x1284a559Ce2e4Ba7551a87A4fB66F34dcF9b0170",
+  "definitionRegistry": "0x1f2Eb14790f1108a3E54D8EB3f65B89ad08Ec400",
+  "commitmentRegistry": "0x3F2DF5669Ce59705e974fe44dD73CC32f57Ed1C9",
+  "registrationBlock": 11783962
+}
