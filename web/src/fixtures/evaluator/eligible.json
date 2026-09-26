@@ -1,0 +1,114 @@
+{
+  "addresses": [
+    "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+    "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+    "0xc2ce43F3BA566570dA3642C1608C1EA83957976D",
+    "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F"
+  ],
+  "explanations": [
+    {
+      "address": "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+      "partners": [
+        {
+          "address": "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xc2ce43F3BA566570dA3642C1608C1EA83957976D",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F",
+          "windows": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "address": "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+      "partners": [
+        {
+          "address": "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xc2ce43F3BA566570dA3642C1608C1EA83957976D",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F",
+          "windows": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "address": "0xc2ce43F3BA566570dA3642C1608C1EA83957976D",
+      "partners": [
+        {
+          "address": "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F",
+          "windows": [
+            1,
+            2
+          ]
+        }
+      ]
+    },
+    {
+      "address": "0xe1315c4281A2eFee4Af35B04870e9cEf390Bd44F",
+      "partners": [
+        {
+          "address": "0x4Ca63cDF34a0fEfFFaB20834Fd69BE3b88d5C6De",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0x78488fB96739A6188E7de7219ca0D11e3869b738",
+          "windows": [
+            1,
+            2
+          ]
+        },
+        {
+          "address": "0xc2ce43F3BA566570dA3642C1608C1EA83957976D",
+          "windows": [
+            1,
+            2
+          ]
+        }
+      ]
+    }
+  ]
+}
