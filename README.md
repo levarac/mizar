@@ -80,11 +80,13 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 
 Pre-existing parts supplied by the team:
 
-- An attendee app that records and signs BLE proximity observations.
-- An operator service and Sepolia contracts that collect signed observations and anchor ordered commitment digests with observation inclusion proofs, plus a protocol reference implementation that derives mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
+- The entire **Beid** attendee-app repository was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. The app records and signs BLE proximity observations.
+- The evidence layer was likewise pre-existing as a whole: the operator service, Sepolia evidence contracts and protocol reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The evidence contracts are separate from the new Mizar claim contract.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
-Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record. The app-side typed signing integration is outside these public repositories and is not independently verified by this README's local checks.
+Hackathon work adds Mizar's credential requirement, N/B eligibility threshold and snapshot outputs to the pre-existing mutual-pair definition, along with the claim contract and EAS schema integration, claim page, local E2E runner, and Alcor's human-check service and join page. The pinned revisions in the components table provide the code record.
+
+The app-side typed signing entry point is new hackathon work inside Beid. It becomes open source when the Beid repository is made public; that publication is in preparation. **Public Beid repository link: pending confirmed publication.** The link will be added once publication is confirmed. This README's local checks do not independently verify the app-side integration.
 
 Two evaluator files explicitly carry **Ported from the pre-existing evidence-layer reference** headers, and one function reimplements a pre-existing definition:
 
