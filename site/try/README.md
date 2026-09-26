@@ -25,7 +25,7 @@ Preview `dist/` with any static server, for example
 ## Deploy
 
 `wrangler deploy` from `site/try/` runs the build and uploads `dist/` as the
-`levarac-try` Worker's static assets on the Levarac Cloudflare account.
+`levarac-try` static assets on the Levarac Cloudflare account.
 
 ## Content
 
