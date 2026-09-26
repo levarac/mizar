@@ -32,12 +32,29 @@ the purpose-01 event-key signature, and the key-to-address mapping.
 
 Local fixture runs set `anchorBlocksSource` to a digest-to-block JSON map and
 `snapshot.cutoffTimestamp` to a fixture time. For an HTTPS evidence source,
-`rpcUrl`, `eventRegistry`, `definitionRegistry`, and
-`commitmentRegistry` are required. The evaluator checks all three registry
+`eventRegistry`, `definitionRegistry`, `commitmentRegistry`, and an RPC endpoint
+are required. Pass the endpoint with `--rpc env:SEPOLIA_RPC_URL`, using a
+command-scoped environment variable, so it never appears in command arguments
+or the archive. An existing `rpcUrl` parameter is still accepted but is removed
+from archived parameters. RPC failure messages omit provider details that could
+contain credentials. The evaluator checks all three registry
 event records, maps commitment digests to the blocks of their registry events,
 and reads the cutoff block timestamp. If any mapping is unavailable, it
 returns `UNAVAILABLE` and does not settle a root. It archives the fetched
 inputs and derived mapping under the output directory for offline replay.
+
+```sh
+pnpm mizar evaluate --params live-params.json --out /tmp/mizar-live \
+  --rpc env:SEPOLIA_RPC_URL --from-block <earliest-registry-deployment-block>
+```
+
+`--from-block` applies to registration, definition and commitment log reads.
+Choose a lower bound that includes all relevant events from all three registries.
+Only commitments recorded by the event's registered operator can supply the
+mapping. A missing matching event remains `UNAVAILABLE`; timestamps and sequence
+numbers are never used to estimate a block. Commitments after the cutoff are
+mapped but excluded from that snapshot's eligibility calculation. The archived
+mapping is checked again by an independent `verify --rpc` run.
 
 `verify` recomputes the root and the sorted eligibility, rejection, and proof
 outputs from the archived inputs. Observation bytes that do not hash to their
@@ -48,7 +65,7 @@ from the archive as the poster wrote it. With `--rpc` and `--contract` it checks
 the snapshot against sources the verifier chooses:
 
 ```sh
-pnpm mizar verify --manifest dir/manifest.json --rpc <url> --contract <claim> \
+pnpm mizar verify --manifest dir/manifest.json --rpc env:SEPOLIA_RPC_URL --contract <claim> \
   --trusted-params <published params.json> [--trusted-params-sha256 <hex>] \
   --chain-id 11155111 [--from-block <n>] \
   --event-registry <addr> --definition-registry <addr> --commitment-registry <addr> \
@@ -104,8 +121,12 @@ is split in half down to 100 blocks; any other RPC error, or more than 500
 chose (the manifest fetch, the RPC, the trusted parameters and credential list)
 are `UNAVAILABLE`. Archive content is the poster's responsibility: a missing or
 unparsable input or output file is a `FAIL`, and output files are read only
-after the root and on-chain checks. None of this has been run against a live
-Sepolia RPC; the suite uses a local JSON-RPC stub.
+after the root and on-chain checks. The automated suite uses a local JSON-RPC
+stub, including live evaluation without a supplied mapping, missing or foreign
+commitments, cutoff exclusion, range splitting and the call cap.
+The live evaluation path has been tested only against that JSON-RPC stub.
+No live Sepolia evaluation has been run yet because the operator's evidence
+endpoint was unavailable.
 
 Future work: the credential omission check trusts whatever list the verifier
 fetches. A list head signed by Alcor (entry count plus digest per cutoff) would
