@@ -8,6 +8,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@noble/curves": "^1.9.1",
     "viem": "^2.37.9"
   },
   "devDependencies": {

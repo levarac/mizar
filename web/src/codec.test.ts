@@ -3,7 +3,10 @@ import { getAddress, hexToBytes, toHex, type Hex } from "viem";
 import vector from "../../docs/design/test-vectors/app-signature-v1.json";
 import {
   StateMismatchError,
+  acceptClaimCallback,
+  addressFromCompressedKey,
   assertCallbackState,
+  claimAppLink,
   claimBodyBytes,
   claimMessageBytes,
   decodeClaimCalldata,
@@ -82,6 +85,40 @@ describe("claim calldata", () => {
     });
     const signer = await recoverClaimSigner(message, decoded.appSignature);
     expect(signer).toBe(eventKeyAddress);
+  });
+});
+
+describe("claim app link", () => {
+  it("is the purpose 0x02 link with the golden body bytes", () => {
+    const body = toHex(claimBodyBytes(BigInt(claim.chainId), claimContract, recipient));
+    const link = claimAppLink({
+      eventId,
+      chainId: BigInt(claim.chainId),
+      claimContract,
+      recipient,
+      state: "pending-state",
+    });
+    expect(link).toBe(`beid://event-key-sign?v=1&p=02&e=${eventId}&b=${body}&st=pending-state`);
+    expect(link.includes("p=01")).toBe(false);
+  });
+});
+
+describe("claim callback checks", () => {
+  const fragment =
+    "#sig=0x3f710e304a2fce9324cfd5540b90966bbc8cdd1969d4461e51ae658404571dcb73b3866bb6649866d99b2f467f1e768c5144ce5e7126c1deb86c77ffb6dcf7581b&k=0x02157f569f4ba8298dc31bf69aaac9efc75c16f9f8fb1630cf06443610e6e26581&a=0x05e8bdca0d0523483bc1a2f490a2f03cb00b776d&st=pending-state";
+
+  it("derives the event key address and accepts the golden signature", async () => {
+    const parsed = parseCallbackFragment(fragment);
+    expect(addressFromCompressedKey(parsed.k)).toBe(eventKeyAddress);
+    const accepted = await acceptClaimCallback({
+      fragment: parsed,
+      expectedState: "pending-state",
+      eventId,
+      chainId: BigInt(claim.chainId),
+      claimContract,
+      recipient,
+    });
+    expect(accepted.eventKeyAddress).toBe(eventKeyAddress);
   });
 });
 

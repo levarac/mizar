@@ -11,6 +11,7 @@ export const claimPageConfig = {
   claimContract: getAddress("0x0000000000000000000000000000000000000001"),
   eventId: `0x${"11".repeat(32)}` as Hex,
   eligibleJsonUrl: "https://example.invalid/eligible.json",
+  expectedRoot: `0x${"22".repeat(32)}` as Hex,
   snapshotId: 0,
 } as const;
 
@@ -21,5 +22,6 @@ export type ClaimPageConfig = {
   claimContract: Address;
   eventId: Hex;
   eligibleJsonUrl: string;
+  expectedRoot: Hex;
   snapshotId: number;
 };

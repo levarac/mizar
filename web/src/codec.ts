@@ -1,3 +1,4 @@
+import { secp256k1 } from "@noble/curves/secp256k1";
 import {
   decodeFunctionData,
   encodeFunctionData,
@@ -5,6 +6,7 @@ import {
   hexToBytes,
   isAddress,
   isHex,
+  keccak256,
   recoverAddress,
   sha256,
   toBytes,
@@ -111,23 +113,19 @@ export function claimAppLink(args: {
   return `beid://event-key-sign?${params.toString()}`;
 }
 
-/**
- * Opens the app so it returns the event key address in the callback.
- * The signature on this link is not a claim and is never submitted.
- * b is a 32-byte nonce, the same width as a human-check challenge.
- */
-export function keyReadLink(args: { eventId: Hex; nonce: Hex; state: string }): string {
-  if (!isHex(args.nonce) || hexToBytes(args.nonce).length !== 32) {
-    throw new Error("nonce must be 32 bytes");
+/** Address of a 33-byte compressed secp256k1 event key. */
+export function addressFromCompressedKey(compressed: Hex): Address {
+  if (!isHex(compressed) || hexToBytes(compressed).length !== 33) {
+    throw new Error("k must be a 33-byte compressed key");
   }
-  const params = new URLSearchParams({
-    v: "1",
-    p: "01",
-    e: args.eventId,
-    b: args.nonce,
-    st: args.state,
-  });
-  return `beid://event-key-sign?${params.toString()}`;
+  const uncompressed = secp256k1.ProjectivePoint.fromHex(compressed.slice(2)).toRawBytes(false);
+  const hash = keccak256(toHex(uncompressed.subarray(1)));
+  return getAddress(`0x${hash.slice(-40)}`);
+}
+
+export function callbackError(fragment: string): string | null {
+  const raw = fragment.startsWith("#") ? fragment.slice(1) : fragment;
+  return new URLSearchParams(raw).get("err");
 }
 
 export function parseCallbackFragment(fragment: string): CallbackFragment {
@@ -159,6 +157,37 @@ export function assertCallbackState(expected: string, fragment: CallbackFragment
   if (expected !== fragment.st) {
     throw new StateMismatchError(expected, fragment.st);
   }
+}
+
+/** Require the stored state, k and a to be the same key, and the signature to recover to a. */
+export async function acceptClaimCallback(args: {
+  fragment: CallbackFragment;
+  expectedState: string;
+  eventId: Hex;
+  chainId: bigint;
+  claimContract: Address;
+  recipient: Address;
+}): Promise<{ eventKeyAddress: Address; signature: Hex; compressedKey: Hex }> {
+  assertCallbackState(args.expectedState, args.fragment);
+  const derived = addressFromCompressedKey(args.fragment.k);
+  if (derived !== args.fragment.a) {
+    throw new Error("event key address does not match a");
+  }
+  const message = claimMessageBytes({
+    eventId: args.eventId,
+    chainId: args.chainId,
+    claimContract: args.claimContract,
+    recipient: args.recipient,
+  });
+  const signer = await recoverClaimSigner(message, args.fragment.sig);
+  if (signer !== args.fragment.a) {
+    throw new Error("recovered signer does not match a");
+  }
+  return {
+    eventKeyAddress: args.fragment.a,
+    signature: args.fragment.sig,
+    compressedKey: args.fragment.k,
+  };
 }
 
 export type ClaimCall = {

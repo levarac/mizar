@@ -11,20 +11,19 @@
       <h1>Claim</h1>
       <p id="status" role="status"></p>
       <section>
-        <h2>Event key</h2>
-        <p id="event-key">Not read yet.</p>
-        <button id="read-key" type="button">Open the app to read the event key</button>
-      </section>
-      <section>
-        <h2>Eligibility</h2>
-        <p id="eligibility">Waiting for an event key.</p>
-      </section>
-      <section>
         <h2>Recipient</h2>
         <label for="recipient">Address that receives the attestation</label>
         <input id="recipient" name="recipient" autocomplete="off" spellcheck="false" placeholder="0x" />
         <p id="recipient-grouped"></p>
         <button id="sign" type="button">Open the app to sign the claim</button>
+      </section>
+      <section>
+        <h2>Event key</h2>
+        <p id="event-key">Waiting for the app callback.</p>
+      </section>
+      <section>
+        <h2>Eligibility</h2>
+        <p id="eligibility">Waiting for the app callback.</p>
       </section>
       <section>
         <h2>Submit</h2>
