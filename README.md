@@ -2,18 +2,19 @@
 
 ## Try it
 
+- **Demo page:** [levarac-try.levarac.workers.dev](https://levarac-try.levarac.workers.dev) explains the rule and links every live piece of the demo.
 - **Demo video:** pending; the link will be added here.
 - **Human check (join page):** [alcor-human-check.levarac.workers.dev](https://alcor-human-check.levarac.workers.dev/). The full flow needs the Beid app, which signs the check with its event key: [install the ETHGlobal Tokyo demo build of Beid (iOS) through TestFlight](https://testflight.apple.com/join/2DNXhfTR). Its [source is public](https://github.com/levarac/beid).
 - **Claim contract on Sepolia:** [MizarClaim on Etherscan](https://sepolia.etherscan.io/address/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC), with [verified source on Sourcify](https://repo.sourcify.dev/11155111/0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC) (exact match).
 - **EAS schema:** [0x858edbff…65d3 on EASScan](https://sepolia.easscan.org/schema/view/0x858edbfff167feaa82c4bb29f3ce4a62ed06024ccdd8377f4f0b26619ccd65d3).
 - **Run it locally in one command:** from `e2e/`, `pnpm install --frozen-lockfile && pnpm e2e` evaluates the fixture, posts a root on a local chain and claims (see [Local E2E](#local-e2e-fixture-only-anvil-and-mockeas)).
 - **Rule comparison:** the [comparison report](docs/demo/comparison.md) evaluates the same recorded synthetic evidence with and without the human check and the encounter rule.
-- **Source:** [Beid](https://github.com/levarac/beid) (app) and [Barnard](https://github.com/levarac/barnard) (BLE library).
+- **Source:** [Beid](https://github.com/levarac/beid) (reference app for the Parallax protocol) and [Barnard](https://github.com/levarac/barnard) (BLE library).
 
 Mizar is part of **Levarac**, the team and project name used for ETHGlobal Tokyo 2026 and its Showcase listing. Levarac comprises:
 
 - **Parallax** — protocol for signed BLE observations and anchored evidence; pre-existing before the hackathon; private repository.
-- **[Beid](https://github.com/levarac/beid)** — attendee app that records and signs BLE observations; pre-existing before the hackathon; public repository.
+- **[Beid](https://github.com/levarac/beid)** — Levarac's reference app, which implements the Parallax protocol end to end: it senses nearby devices over Barnard, signs observations with its event key and submits them for anchoring; pre-existing before the hackathon; public repository.
 - **[Barnard](https://github.com/levarac/barnard)** — BLE sensing library and SDK; pre-existing before the hackathon; public repository.
 - **[Mizar](https://github.com/levarac/mizar)** — participation-rule evaluator and EAS claim system; built at ETHGlobal Tokyo 2026; public repository.
 - **[Alcor](https://github.com/levarac/alcor)** — human-check service and join page; built at ETHGlobal Tokyo 2026; public repository.
@@ -75,7 +76,7 @@ flowchart TD
     World[World ID / IDKit 4]
     EAS[EAS on Sepolia]
     subgraph Existing[Pre-existing Parallax, Beid and Barnard]
-        SDK[Barnard BLE SDK] --> App[Beid attendee app]
+        SDK[Barnard BLE SDK] --> App[Beid reference app]
         App -->|Signed observations| Operator[Parallax operator service]
         Operator -->|Ordered commitments| Registry[Parallax Sepolia commitment registry]
         Operator -->|Published verification data| Evidence[Signed evidence and inclusion proofs]
@@ -110,7 +111,7 @@ The first Mizar commit is [5da0c79](https://github.com/levarac/mizar/commit/5da0
 
 Pre-existing parts supplied by the team:
 
-- The entire **[Beid](https://github.com/levarac/beid)** attendee-app repository was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. Beid records and signs BLE proximity observations; its repository is public.
+- The entire **[Beid](https://github.com/levarac/beid)** repository (the reference app for the Parallax protocol) was pre-existing, including its UI design work. Its repository history at the start of hacking predates **2026-09-25 21:00 JST**. Beid records and signs BLE proximity observations; its repository is public.
 - The **Parallax** protocol was likewise pre-existing as a whole: its operator service, Sepolia evidence contracts and reference implementation all existed before **2026-09-25 21:00 JST**. They collect signed observations, anchor ordered commitment digests with observation inclusion proofs, and derive mutual observation relations. The evaluator's ported files and reimplemented mutual-pair definition follow that reference. The Parallax evidence contracts are separate from the new Mizar claim contract; the Parallax repository is private.
 - [Barnard](https://github.com/levarac/barnard), the public MIT-licensed BLE sensing SDK; [7585339](https://github.com/levarac/barnard/commit/758533956cf3977f0377aed62b5a6f978c56978f), dated **2026-09-22**, is a pre-hackathon revision.
 
