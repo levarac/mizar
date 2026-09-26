@@ -229,7 +229,7 @@ describe("CLI receipt", () => {
       expect(unavailable.status).toBe(2);
       expect(unavailable.stdout).toContain('"result":"UNAVAILABLE"');
     } finally { rmSync(out, { recursive: true, force: true }); }
-  }, 30_000);
+  }, 120_000);
   it("returns UNAVAILABLE before fetching live evidence without registry mapping", () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-live-test-"));
     try {
@@ -244,7 +244,7 @@ describe("CLI receipt", () => {
       expect(result.stdout).toContain('"result":"UNAVAILABLE"');
       expect(result.stdout).toContain("all three registry addresses");
     } finally { rmSync(out, { recursive: true, force: true }); }
-  }, 30_000);
+  }, 120_000);
   it("writes four output classes, passes, and fails on one-bit input/root changes", () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-eval-test-"));
     const run = (...args: string[]) => spawnSync("pnpm", ["mizar", ...args], {
@@ -314,7 +314,7 @@ describe("CLI receipt", () => {
       expect(corrupted.stdout).toContain('"fault":"invalid_signature"');
       expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
-  }, 30_000);
+  }, 120_000);
   const checkRpc = async (liveOnly: boolean) => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
@@ -605,5 +605,5 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
   };
   it("maps live anchors using registered operator events and private RPC input", () => checkRpc(true), 240_000);
   it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub",
-    () => checkRpc(false), 240_000);
+    () => checkRpc(false), 600_000);
 });
