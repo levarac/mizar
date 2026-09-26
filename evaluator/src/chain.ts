@@ -5,8 +5,9 @@ import { UnavailableError } from "./io.js";
 // RPC failures mean the chain could not be read, never that the snapshot is wrong.
 async function rpc<T>(call: () => Promise<T>): Promise<T> {
   try { return await call(); }
-  catch (error) {
-    throw new UnavailableError(`RPC unavailable: ${error instanceof Error ? error.message : String(error)}`);
+  catch {
+    // Provider errors may include authenticated URLs or echo credentials.
+    throw new UnavailableError("RPC unavailable");
   }
 }
 // Public RPCs cap eth_getLogs by block range or result size. Only such an error splits

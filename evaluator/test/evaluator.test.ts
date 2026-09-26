@@ -213,8 +213,8 @@ describe("OpenZeppelin address-only tree", () => {
 
 describe("CLI receipt", () => {
   it("uses an explicit synthetic pending feed and refuses missing live feed", () => {
-    const run = (file: string) => spawnSync("pnpm",
-      ["mizar", "progress", "--params", file, "--key", credentials.credentials[0].eventKeyAddress],
+    const run = (file: string) => spawnSync(process.execPath,
+      ["--import", "tsx", "src/cli.ts", "progress", "--params", file, "--key", credentials.credentials[0].eventKeyAddress],
       { cwd: root, encoding: "utf8", timeout: 30_000 });
     const fixtureProgress = run("test/fixtures/params.json");
     expect(fixtureProgress.status).toBe(0);
@@ -237,8 +237,8 @@ describe("CLI receipt", () => {
       writeFileSync(file, JSON.stringify({ ...params,
         evidenceSource: `https://fixture.invalid/v1/events/${params.eventId.slice(2)}/verification`,
         rpcUrl: undefined, commitmentRegistry: undefined }));
-      const result = spawnSync("pnpm",
-        ["mizar", "evaluate", "--params", file, "--out", join(out, "result")],
+      const result = spawnSync(process.execPath,
+        ["--import", "tsx", "src/cli.ts", "evaluate", "--params", file, "--out", join(out, "result")],
         { cwd: root, encoding: "utf8", timeout: 30_000 });
       expect(result.status).toBe(2);
       expect(result.stdout).toContain('"result":"UNAVAILABLE"');
@@ -247,7 +247,7 @@ describe("CLI receipt", () => {
   }, 30_000);
   it("writes four output classes, passes, and fails on one-bit input/root changes", () => {
     const out = mkdtempSync(join(tmpdir(), "mizar-eval-test-"));
-    const run = (...args: string[]) => spawnSync("pnpm", ["mizar", ...args], {
+    const run = (...args: string[]) => spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
       cwd: root, encoding: "utf8", timeout: 30_000,
     });
     try {
@@ -328,6 +328,8 @@ describe("CLI receipt", () => {
     let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
     let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest];
     let extraCommitment = false, junkCommitment = false, extraDefinition = false, rpcDown = false;
+    let commitmentPresent = true, foreignRecorder = false;
+    const requestedFroms: number[] = [];
     const log = (address: string, block: number, topics: string[], data: string) => ({
       address, blockNumber: toBeHex(block), blockHash: "0x" + "11".repeat(32),
       transactionHash: "0x" + "22".repeat(32), transactionIndex: "0x0", logIndex: "0x0", removed: false, topics, data });
@@ -352,7 +354,9 @@ describe("CLI receipt", () => {
           recorder = "0x" + admission.anchorRegistration.operator) =>
           log(registries.commitmentRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
             abi.encode(["bytes32", "address", "uint64"], ["0x" + previous, recorder, anchor.committedAt]));
-        return [commitment(anchor.sequence, anchor.commitmentDigest, anchor.previousCommitmentDigest, anchorBlock),
+        return [...(commitmentPresent ? [commitment(anchor.sequence, anchor.commitmentDigest,
+          anchor.previousCommitmentDigest, anchorBlock,
+          foreignRecorder ? "0x" + "99".repeat(20) : "0x" + admission.anchorRegistration.operator)] : []),
           ...(extraCommitment ? [commitment(2, "ab".repeat(32), anchor.commitmentDigest, cutoff - 5)] : []),
           ...(junkCommitment ? [commitment(2, "ef".repeat(32), anchor.commitmentDigest, cutoff - 4,
             "0x" + "99".repeat(20))] : [])];
@@ -364,7 +368,8 @@ describe("CLI receipt", () => {
     const getLogs = (filter: { fromBlock: string; toBlock: string; topics: string[] }) => {
       const from = Number(filter.fromBlock), to = filter.toBlock === "latest" ? head : Number(filter.toBlock);
       getLogsCalls++;
-      if (rpcDown) return { error: { code: -32603, message: "internal error" } };
+      requestedFroms.push(from);
+      if (rpcDown) return { error: { code: -32603, message: "internal error at https://rpc.example/secret-test-token" } };
       if (to - from + 1 > rangeCap) return { error: { code: -32005, message: "block range too large" } };
       return { result: logsFor(filter.topics[0]).filter(l => Number(l.blockNumber) >= from && Number(l.blockNumber) <= to) };
     };
@@ -388,12 +393,23 @@ describe("CLI receipt", () => {
     });
     await new Promise<void>(done => server.listen(0, "127.0.0.1", done));
     const rpc = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const liveEvidence = join(out, "live-envelopes.json");
+    writeFileSync(liveEvidence, JSON.stringify(page));
+    const fetchStub = join(out, "fetch-stub.mjs");
+    writeFileSync(fetchStub, `import { readFileSync } from "node:fs";
+const original = globalThis.fetch;
+globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.example/")
+  ? Promise.resolve(new Response(readFileSync(${JSON.stringify(liveEvidence)}), { status: 200 }))
+  : original(url, init);
+`);
     // Async spawn: spawnSync would block the stub server in this process.
-    const run = (...args: string[]) => new Promise<{ status: number | null; stdout: string }>(done => {
-      const child = spawn("pnpm", ["mizar", ...args], { cwd: root });
-      let stdout = "";
+    const run = (...args: string[]) => new Promise<{ status: number | null; stdout: string; stderr: string }>(done => {
+      const child = spawn(process.execPath, ["--import", "tsx", "--import", fetchStub, "src/cli.ts", ...args],
+        { cwd: root, env: { ...process.env, MIZAR_TEST_RPC: rpc } });
+      let stdout = "", stderr = "";
       child.stdout.on("data", chunk => { stdout += chunk; });
-      child.on("close", status => done({ status, stdout }));
+      child.stderr.on("data", chunk => { stderr += chunk; });
+      child.on("close", status => done({ status, stdout, stderr }));
     });
     const fixtures = join(root, "test/fixtures");
     const published = { ...params, ...registries, evidenceSource: join(fixtures, "envelopes.json"),
@@ -430,6 +446,61 @@ describe("CLI receipt", () => {
       expect(result.stdout).toContain(reason);
     };
     try {
+      const liveParams = join(out, "live-params.json"), liveOut = join(out, "live");
+      writeFileSync(liveParams, JSON.stringify({ ...published,
+        evidenceSource: `https://evidence.example/v1/events/${page.context}/verification`,
+        anchorBlocksSource: undefined, snapshot: { id: 1, cutoffBlock: cutoff } }));
+      const evaluateLive = (...extra: string[]) => run("evaluate", "--params", liveParams,
+        "--out", liveOut, "--rpc", "env:MIZAR_TEST_RPC", "--from-block", "10", ...extra);
+      requestedFroms.length = 0;
+      const live = await evaluateLive();
+      expect(live.stdout, live.stderr).toContain('"result":"EVALUATED"');
+      expect(live.status).toBe(0);
+      expect(JSON.parse(readFileSync(join(liveOut, "inputs/anchor-blocks.json"), "utf8"))).toEqual(anchors);
+      expect(requestedFroms.length).toBeGreaterThan(3);
+      expect(requestedFroms.every(from => from >= 10)).toBe(true);
+      const liveManifest = JSON.parse(readFileSync(join(liveOut, "manifest.json"), "utf8"));
+      expect(liveManifest.parameters.snapshot.cutoffTimestamp).toBe(params.snapshot.cutoffTimestamp);
+      expect(JSON.stringify(liveManifest)).not.toContain(rpc);
+      expect(liveManifest.parameters.rpcUrl).toBeUndefined();
+      expect(liveManifest.trust.anchorBlockMapping).toContain("ObservationCommitmentRecorded");
+      const legacyParams = join(out, "legacy-rpc-params.json");
+      writeFileSync(legacyParams, JSON.stringify({ ...published, rpcUrl: rpc }));
+      const legacyOut = join(out, "legacy-rpc");
+      expect((await run("evaluate", "--params", legacyParams, "--out", legacyOut)).status).toBe(0);
+      for (const file of ["manifest.json", "inputs/params.json"])
+        expect(readFileSync(join(legacyOut, file), "utf8")).not.toContain(rpc);
+      expect((await run("verify", "--manifest", join(legacyOut, "manifest.json"))).status).toBe(0);
+      expect((await evaluateLive("--from-block", "-1")).status).toBe(2);
+      expect((await evaluateLive("--from-block", "15")).stdout).toContain("event registration unavailable");
+      expect((await evaluateLive("--rpc", "env:MIZAR_MISSING_RPC")).stdout).toContain('"result":"UNAVAILABLE"');
+      for (const foreign of [false, true]) {
+        commitmentPresent = foreign;
+        foreignRecorder = foreign;
+        const missing = await evaluateLive();
+        expect(missing.status).toBe(2);
+        expect(missing.stdout).toContain('"result":"UNAVAILABLE"');
+        expect(missing.stdout).toContain("commitment anchor not backed by registry event");
+      }
+      commitmentPresent = true; foreignRecorder = false;
+      junkCommitment = true;
+      expect((await evaluateLive()).status).toBe(0);
+      junkCommitment = false;
+      anchorBlock = cutoff + 1;
+      const afterCutoff = await evaluateLive();
+      expect(afterCutoff.status).toBe(0);
+      expect(afterCutoff.stdout).toContain('"eligible":0');
+      anchorBlock = anchors[anchor.commitmentDigest];
+      rpcDown = true;
+      const failure = await evaluateLive();
+      expect(failure.stdout).toContain('"result":"UNAVAILABLE"');
+      expect(failure.stdout).not.toContain("secret-test-token");
+      expect(failure.stderr).not.toContain("secret-test-token");
+      rpcDown = false;
+      head = 2_000_000;
+      expect((await evaluateLive()).stdout).toContain("more than 500 eth_getLogs calls");
+      head = 5_000;
+
       // Without verifier-supplied trust anchors an on-chain check never passes.
       const plain = join(out, "plain");
       expect((await run("evaluate", "--params", "test/fixtures/params.json", "--out", plain)).status).toBe(0);
@@ -442,6 +513,8 @@ describe("CLI receipt", () => {
       const pass = await verifyOnChain(honest.manifest);
       expect(pass.stdout).toContain('"result":"PASS"');
       expect(pass.status).toBe(0);
+      expect((await run("verify", "--manifest", honest.manifest, "--rpc", "env:MIZAR_TEST_RPC",
+        "--contract", contract, ...trust({}))).stdout).toContain('"result":"PASS"');
       await expectUnavailable(honest.manifest, "trusted parameters name another chain ID than --chain-id",
         { "chain-id": "1" });
       const otherChainParams = join(out, "other-chain-params.json");
