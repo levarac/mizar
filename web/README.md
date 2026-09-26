@@ -101,11 +101,13 @@ Only the maintainer executes the upload after reviewing the completed values
 and local results. From `web/`, load the Levarac token inside the same zsh
 subshell with tracing disabled and scope credentials to the command:
 
+Set `SECRETS_FILE` to your own untracked file defining `CLOUDFLARE_API_TOKEN_LEVARAC`.
+
 ```zsh
 (
   set +x
   set +v
-  source ~/.config/zsh/secrets.zsh >/dev/null 2>&1 || exit 1
+  source "$SECRETS_FILE" >/dev/null 2>&1 || exit 1
   if [[ -z "${CLOUDFLARE_API_TOKEN_LEVARAC:-}" ]]; then
     printf '%s\n' UNSET
     exit 1
