@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "levarac-mizar-claim",
+  "account_id": "3b81daf46f27d8d61d46559407b8a607",
+  "compatibility_date": "2026-09-26",
+  "workers_dev": true,
+  "preview_urls": false,
+  "build": { "command": "pnpm build" },
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "none"
+  }
+}

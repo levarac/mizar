@@ -1,3 +1,4 @@
+import { friendlyError, setPurpose, showState, showTransaction, type ClaimView } from "./presentation";
 import {
   createWalletClient,
   custom,
@@ -37,6 +38,9 @@ const recipientGrouped = document.querySelector<HTMLElement>("#recipient-grouped
 const signButton = document.querySelector<HTMLButtonElement>("#sign")!;
 const submitButton = document.querySelector<HTMLButtonElement>("#submit")!;
 const signatureEl = document.querySelector<HTMLElement>("#signature")!;
+setPurpose(claimPageConfig.eventId);
+let hasStatusError = false;
+let recipientErrorReturnState: ClaimView = "idle";
 
 const chain = defineChain({
   id: claimPageConfig.chainId,
@@ -48,6 +52,15 @@ const chain = defineChain({
 function setStatus(message: string, isError = false): void {
   statusEl.textContent = message;
   statusEl.classList.toggle("error", isError);
+  hasStatusError = isError;
+  if (isError) {
+    showState(/AlreadyClaimed/.test(message) ? "already-claimed" : "error", /AlreadyClaimed/.test(message) ? undefined : friendlyError(message));
+  } else if (message.startsWith("Claim submitted: ")) {
+    showTransaction(message.slice("Claim submitted: ".length));
+    showState("submitted");
+  } else {
+    statusEl.textContent = message;
+  }
 }
 
 function randomHex(bytes: number): Hex {
@@ -57,14 +70,16 @@ function randomHex(bytes: number): Hex {
 }
 
 function describeEligibility(eligible: EligibleKey): string {
-  if (eligible.partners.length === 0) return "Eligible. No partners are listed.";
-  const partners = eligible.partners
-    .map((partner) => `${groupAddress(partner.address)} (windows ${partner.windows.join(", ") || "none"})`)
-    .join("; ");
-  return `Eligible. Partners: ${partners}.`;
+  return `${eligible.partners.length} distinct partners in the published eligible list.`;
 }
 
 function render(session: Session, eligible?: EligibleKey | null): void {
+  const pendingRecipient = session.pending?.recipient;
+  const hasPendingRecipient = typeof pendingRecipient === "string" && isAddress(pendingRecipient) && getAddress(pendingRecipient) !== zeroAddress;
+  if (hasPendingRecipient && !session.claim && recipientInput.value.trim() === "") {
+    recipientInput.value = pendingRecipient;
+    recipientGrouped.textContent = groupAddress(pendingRecipient);
+  }
   eventKeyEl.textContent = session.eventKeyAddress
     ? groupAddress(session.eventKeyAddress)
     : "Waiting for the app callback.";
@@ -81,6 +96,11 @@ function render(session: Session, eligible?: EligibleKey | null): void {
     ? `Signature stored for ${groupAddress(session.claim.recipient)}.`
     : "No claim signature yet.";
   submitButton.disabled = !session.claim || eligible === null;
+  if (!hasStatusError) {
+    showState(!session.eventKeyAddress ? (hasPendingRecipient ? "signature" : "idle")
+      : eligible === undefined ? "lookup" : eligible === null ? "not-eligible"
+      : session.claim ? "ready" : hasPendingRecipient ? "signature" : "recipient");
+  }
 }
 
 function readRecipient(): Address | null {
@@ -94,9 +114,17 @@ function readRecipient(): Address | null {
 function showRecipient(): void {
   const value = recipientInput.value.trim();
   if (isAddress(value) && getAddress(value) === zeroAddress) {
+    const current = document.querySelector<HTMLElement>("#claim-panel")?.dataset.state as ClaimView | undefined;
+    if (current && current !== "error") recipientErrorReturnState = current;
     recipientGrouped.textContent = "";
     setStatus("The recipient cannot be the zero address.", true);
     return;
+  }
+  if (statusEl.textContent === "The recipient cannot be the zero address.") {
+    hasStatusError = false;
+    statusEl.textContent = "";
+    statusEl.classList.toggle("error", false);
+    showState(recipientErrorReturnState);
   }
   const recipient = readRecipient();
   recipientGrouped.textContent = recipient ? groupAddress(recipient) : "";
@@ -130,6 +158,7 @@ signButton.addEventListener("click", () => {
   const state = randomHex(16);
   const session = clearClaimIfDifferent(loadSession(), { recipient });
   saveSession({ ...session, pending: { state, recipient } });
+  showState("signature");
   window.location.assign(
     claimAppLink({
       eventId: claimPageConfig.eventId,
@@ -150,6 +179,7 @@ submitButton.addEventListener("click", async () => {
     setStatus("No injected wallet was found.", true);
     return;
   }
+  showState("submitting");
   try {
     const eligible = await loadEligibility(claim.eventKeyAddress);
     if (!eligible) {
@@ -188,6 +218,7 @@ async function boot(): Promise<void> {
     setStatus("The app cancelled the signature.", true);
     history.replaceState(null, "", window.location.pathname + window.location.search);
   } else if (hash.includes("sig=")) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
     try {
       const callback = parseCallbackFragment(hash);
       if (!session.pending) throw new Error("No pending app request is stored in this browser.");
@@ -223,7 +254,8 @@ async function boot(): Promise<void> {
       const eligible = await loadEligibility(session.eventKeyAddress);
       render(session, eligible);
     } catch (error) {
-      eligibilityEl.textContent = error instanceof Error ? error.message : "Could not read eligible.json.";
+      eligibilityEl.textContent = "The published eligibility list could not be read.";
+      if (!hasStatusError) showState("error", "The published eligibility list could not be read; check your connection and reload this page.");
       submitButton.disabled = true;
     }
   }

@@ -3,34 +3,177 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Claim</title>
+    <meta name="theme-color" content="#FEFFFB" />
+    <title>Claim your participation record</title>
+    <link
+      rel="preload"
+      href="/fonts/InterVariable.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
+    <header class="masthead">
+      <a class="wordmark" href="/" aria-label="Claim page home"
+        ><span class="square" aria-hidden="true"></span>PARTICIPATION RECORD</a
+      ><span class="network">SEPOLIA TESTNET</span>
+    </header>
     <main>
-      <h1>Claim</h1>
-      <p id="status" role="status"></p>
-      <section>
-        <h2>Recipient</h2>
-        <label for="recipient">Address that receives the attestation</label>
-        <input id="recipient" name="recipient" autocomplete="off" spellcheck="false" placeholder="0x" />
-        <p id="recipient-grouped"></p>
-        <button id="sign" type="button">Open the app to sign the claim</button>
-      </section>
-      <section>
-        <h2>Event key</h2>
-        <p id="event-key">Waiting for the app callback.</p>
-      </section>
-      <section>
-        <h2>Eligibility</h2>
-        <p id="eligibility">Waiting for the app callback.</p>
-      </section>
-      <section>
-        <h2>Submit</h2>
-        <p id="signature">No claim signature yet.</p>
-        <button id="submit" type="button">Submit claim from the connected wallet</button>
-      </section>
+      <div class="intro">
+        <p class="eyebrow">EVIDENCE → ELIGIBILITY → RECORD</p>
+        <h1>
+          Claim your <br /><span class="highlight">participation record.</span>
+        </h1>
+        <p class="lede">Your event participation, recorded onchain.</p>
+      </div>
+      <div class="workspace">
+        <section
+          id="claim-panel"
+          class="claim-panel"
+          data-state="unconfigured"
+          aria-labelledby="state-title"
+        >
+          <ol class="steps" aria-label="Claim progress">
+            <li data-step="1"><span>01</span> Eligibility</li>
+            <li data-step="2"><span>02</span> App signature</li>
+            <li data-step="3"><span>03</span> Claim</li>
+          </ol>
+          <div class="state-body">
+            <div class="state-heading">
+              <p id="state-label" class="eyebrow">SETUP REQUIRED</p>
+              <span id="state-result" class="result-chip" hidden></span>
+            </div>
+            <h2 id="state-title">
+              This claim page is <span class="highlight">not ready yet.</span>
+            </h2>
+            <p id="status" hidden></p>
+            <p id="state-status" role="status" aria-live="polite">
+              The event configuration is incomplete; ask the event organizer for
+              the published claim page.
+            </p>
+            <div id="recipient-section" hidden>
+              <label for="recipient">Recipient wallet</label>
+              <input
+                id="recipient"
+                name="recipient"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="0x…"
+                aria-describedby="recipient-help recipient-grouped"
+              />
+              <p id="recipient-help" class="helper">
+                The wallet that will receive your participation record.
+              </p>
+              <p id="recipient-grouped" class="address"></p>
+            </div>
+            <p id="purpose" class="purpose" hidden></p>
+            <div class="actions">
+              <button id="sign" type="button" hidden>
+                Open the app to sign <span aria-hidden="true">↗</span></button
+              ><button id="submit" type="button" hidden disabled>
+                Submit claim <span aria-hidden="true">→</span></button
+              ><a
+                id="transaction-link"
+                class="primary-link"
+                hidden
+                target="_blank"
+                rel="noopener noreferrer"
+                >View transaction <span aria-hidden="true">↗</span></a
+              >
+            </div>
+          </div>
+          <div class="evidence-summary">
+            <div>
+              <p class="eyebrow">EVENT KEY</p>
+              <p id="event-key" class="address">
+                Available after the app responds.
+              </p>
+            </div>
+            <div>
+              <p class="eyebrow">ELIGIBILITY</p>
+              <p id="eligibility">Not checked yet.</p>
+            </div>
+            <p id="signature" class="helper">No app signature yet.</p>
+          </div>
+        </section>
+        <aside class="rule-card" aria-labelledby="rules-title">
+          <div class="rule-heading">
+            <p class="eyebrow">THE PARTICIPATION RULE</p>
+            <h2 id="rules-title">
+              What <span class="highlight">counts?</span>
+            </h2>
+          </div>
+          <p id="rules-status" class="verification" role="status">
+            Parameters have not been verified.
+          </p>
+          <div id="rules-content" hidden>
+            <div class="rule-numbers">
+              <div>
+                <span class="eyebrow">N · PARTNERS</span
+                ><strong id="rule-n"></strong>
+                <p>distinct partners<br />minimum</p>
+              </div>
+              <div>
+                <span class="eyebrow">B · WINDOWS</span
+                ><strong id="rule-b"></strong>
+                <p>time windows<br />per partner</p>
+              </div>
+            </div>
+            <p class="rule-description">
+              The published rule is evaluated from reciprocal observations and
+              human-check credentials.
+            </p>
+            <div id="event-reference" class="event-reference" hidden>
+              <p class="eyebrow">EVENT DEFINITION · REFERENCE</p>
+              <p class="helper">
+                Shown for reference; not part of the verified parameters.
+              </p>
+              <dl>
+                <div id="slot-row" hidden>
+                  <dt>Window length</dt>
+                  <dd id="rule-slot"></dd>
+                </div>
+                <div id="window-row" hidden>
+                  <dt>Event window</dt>
+                  <dd>
+                    <span id="rule-window-utc"></span
+                    ><small id="rule-window-local"></small>
+                  </dd>
+                </div>
+              </dl>
+            </div>
+            <div class="issuer">
+              <p class="eyebrow">HUMAN-CHECK ISSUER</p>
+              <a id="rule-issuer" target="_blank" rel="noopener noreferrer"
+                >Credential service <span aria-hidden="true">↗</span></a
+              >
+              <details>
+                <summary>Public key <span id="rule-key-short"></span></summary>
+                <p id="rule-key" class="address"></p>
+              </details>
+            </div>
+            <div class="params-source">
+              <a id="rule-link" target="_blank" rel="noopener noreferrer"
+                >Published parameters <span aria-hidden="true">↗</span></a
+              >
+              <p class="eyebrow">SHA-256 · EXACT FILE BYTES</p>
+              <p id="rule-digest" class="digest"></p>
+            </div>
+          </div>
+          <p id="rules-error" class="helper">
+            No values are displayed until the file matches its expected SHA-256.
+          </p>
+        </aside>
+      </div>
+      <footer>
+        <span>A record of meeting the published rule.</span
+        ><a href="/claim-config.json"
+          >Event configuration <span aria-hidden="true">↗</span></a
+        >
+      </footer>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script type="module" src="/src/entry.ts"></script>
   </body>
 </html>

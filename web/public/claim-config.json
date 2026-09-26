@@ -1,0 +1,15 @@
+{
+  "chainId": 11155111,
+  "chainName": "Sepolia",
+  "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
+  "eventId": "0xccb8770a524f4145e04b3c97d8ffe2f7301ce65b4041d80e419bafdd803b2ee1",
+  "claimContract": "0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC",
+  "eligibleJsonUrl": "REPLACE_SAME_ORIGIN_ELIGIBLE_JSON_URL",
+  "expectedRoot": "REPLACE_POSTED_ROOT",
+  "snapshotId": "REPLACE_POSTED_SNAPSHOT_ID",
+  "paramsUrl": "https://raw.githubusercontent.com/levarac/mizar/f8823ac23b3f936e1c7820dab65db49fbf600ee7/docs/demo/params-0xccb8770a.json",
+  "paramsSha256": "1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08",
+  "slotSeconds": 300,
+  "eventStart": "2026-09-26T05:30:00Z",
+  "eventEnd": "2026-09-27T15:00:00Z"
+}

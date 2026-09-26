@@ -5,15 +5,21 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit",
+    "deploy:dry-run": "wrangler deploy --dry-run",
+    "test": "vitest run",
+    "build:preview": "tsc --noEmit && vite build --config vite.preview.config.ts --mode preview",
+    "preview": "vite preview --config vite.preview.config.ts"
   },
   "dependencies": {
     "@noble/curves": "^1.9.1",
     "viem": "^2.37.9"
   },
   "devDependencies": {
+    "happy-dom": "^20.14.5",
     "typescript": "^5.9.2",
     "vite": "^7.1.5",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "4.139.0"
   }
 }
