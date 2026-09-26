@@ -1,0 +1,28 @@
+{
+  "baselineCommit": "a07469bd3692751a9738d166800fc4d841cf9794",
+  "input": "test/fixtures/params.json",
+  "receiptNormalization": "Only the absolute output directory is replaced by <OUTPUT_DIRECTORY>.",
+  "files": {
+    "eligible.json": "035fed85c0a48652f1ef853de71f7b2dcdfd3013339b7969b21edb0914ac9ed6",
+    "inputs/anchor-blocks.json": "d544c2d00a355aefa8cbee727accd9b2ce00c8000a64e8283f1637ddb025d460",
+    "inputs/credentials.json": "31f0edbf0251c157d9021462fdd18b79453d0bfb2253887d60c6922fa72da48d",
+    "inputs/envelopes.json": "62311c0169a4552a50b431110bf40c1cec5e671fe9a52561a5aefb1efba3ad53",
+    "inputs/params.json": "fdfc3f30d9c5982c2d70356cc0568ae36dc41af52eb127a0488508bd8cccea7e",
+    "manifest.json": "1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a",
+    "proofs/0x4ca63cdf34a0fefffab20834fd69be3b88d5c6de.json": "75efe1a460b7b2ff9eb2dc54170825499d68372da15b063177ea751322f131c7",
+    "proofs/0x78488fb96739a6188e7de7219ca0d11e3869b738.json": "b17c1bcdafffcb187576fa89cbd8805bb281f7aeb140aee0b99bf890302bf8ba",
+    "proofs/0xc2ce43f3ba566570da3642c1608c1ea83957976d.json": "7b18880666de6a4f7e496b694ef944cb164b75842f6fe02199c1d1baa8f1e3e7",
+    "proofs/0xe1315c4281a2efee4af35b04870e9cef390bd44f.json": "02d582333ebff6ced57431f89aa5799d6ef93eef249c57e630fc544694348b33",
+    "rejected.json": "0f081b16f01298c4ce5044b6dfe6bc8fd2b0e43d1a1188b81721f5d054c23961"
+  },
+  "evaluate": {
+    "exitCode": 0,
+    "stdout": "{\"result\":\"EVALUATED\",\"root\":\"0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9\",\"eligible\":4,\"rejected\":4,\"invalidObservations\":1,\"manifestDigest\":\"0x1f61fff1d38a9944ad53b6562423d5b9b33f59e067dece272b58087c1077351a\",\"out\":\"<OUTPUT_DIRECTORY>\"}\n",
+    "stderr": ""
+  },
+  "verify": {
+    "exitCode": 0,
+    "stdout": "{\"result\":\"PASS\"}\n",
+    "stderr": ""
+  }
+}

@@ -365,6 +365,20 @@ async function progress(paramsFile: string, key: string, pendingArg?: string) {
 }
 async function main() {
   const [command, ...rest] = process.argv.slice(2);
+  if (command === "graph") {
+    try {
+      const a = argsOf(rest);
+      if (!a.out || Boolean(a.params) === Boolean(a.snapshot) ||
+          Object.keys(a).some(key => !["params", "snapshot", "out"].includes(key)))
+        throw new Error("graph supports only --params or --snapshot, and --out");
+      const { graph } = await import("./graph.js");
+      await graph({ params: a.params, snapshot: a.snapshot }, a.out);
+    } catch (error) {
+      console.error("NON-CANONICAL " + (error instanceof Error ? error.message : String(error)));
+      process.exitCode = 2;
+    }
+    return;
+  }
   if (command === "compare") {
     try {
       const a = argsOf(rest);

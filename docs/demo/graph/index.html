@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Participation through encounters</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">EVIDENCE REPLAY <span id="provenance">RECORDED DATA</span></p>
+      <h1>Participation, <mark>earned through encounters.</mark></h1>
+      <p class="intro">A human check admits the key. Repeated mutual encounters decide who qualifies.</p>
+    </header>
+    <section class="rule" aria-label="Evaluation rule">
+      <div><span class="label">DISTINCT PARTNERS</span><strong id="partners">N = —</strong></div>
+      <div><span class="label">WINDOWS PER PARTNER</span><strong id="windows">B = —</strong></div>
+      <div><span class="label">WINDOW LENGTH</span><strong id="length">— MIN</strong></div>
+      <p>Only credentialed keys count.<br><span>Each line is a mutual observation.</span></p>
+    </section>
+    <p id="error" role="alert" hidden></p>
+    <section id="scene" aria-label="Event keys and mutual observations"></section>
+    <section class="playback" aria-label="Replay controls">
+      <div class="time"><span class="eyebrow" id="slot-counter" aria-live="polite">LOADING</span><span id="phase">Before observations arrive</span></div>
+      <input id="timeline" type="range" min="0" max="2" value="0" aria-label="Replay slot" disabled>
+      <div class="transport">
+        <button id="play" disabled>Play</button><button id="pause" disabled>Pause</button><button id="step" disabled>Step</button><button id="reset" disabled>Reset</button>
+      </div>
+    </section>
+    <footer>
+      <div><strong id="result">Loading recorded evidence</strong><p id="caveat">NON-CANONICAL · Presentation only. No chain verification or claim proofs.</p></div>
+      <label class="load" for="file">LOAD GRAPH.JSON<input id="file" type="file" accept="application/json,.json"></label>
+    </footer>
+    <p id="selection" class="selection">Select a key to see its full address.</p>
+  </main>
+</body>
+</html>

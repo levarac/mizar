@@ -36,6 +36,19 @@ addresses}`; every evaluated address must appear exactly once. Without it,
 the table has one row per address. `comparison.provenance: recorded-synthetic`
 labels the fixture origin; that label is a declaration, not a live verification.
 
+## Non-canonical graph replay
+
+`mizar graph --params p.json --out <empty-directory>` exports verified local
+observations as `graph.json`. Alternatively, `--snapshot <evaluation-directory>`
+reads its archived `inputs/` and checks `eligible.json` and `rejected.json`
+against the recomputed rule. No RPC, remote fetches, roots, manifests or proofs
+are added. `evaluate` and `verify` outputs are unchanged.
+
+The [static graph page](../docs/demo/graph/README.md) replays exported frames,
+using the same `deriveRelations` and `evaluateRule` functions as evaluation.
+It includes the synthetic comparison demo, local-file loading, browser checks
+and a reproducible 1080p clip capture command.
+
 ## Parameters and inputs
 
 `evidenceSource` is a local JSON file containing verification-envelope pages,
