@@ -22,10 +22,11 @@ shows its values under **Event and claim details**.
   the claim page does not call World ID.
 
 The supplied Sepolia claim contract is
-`0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC`. Three explicit placeholders remain
-until the first root is posted: `expectedRoot`, `snapshotId`, and `eligibleJsonUrl`. Set
-`snapshotId` to a JSON integer (zero is valid if that is the posted ID), and
-`eligibleJsonUrl` to `/snapshots/<snapshotId>/eligible.json`.
+`0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC`. Before a root is posted, three
+fields are explicit placeholders: `expectedRoot`, `snapshotId`, and `eligibleJsonUrl`.
+Set `snapshotId` to a JSON integer (zero is valid if that is the posted ID), and
+`eligibleJsonUrl` to `/snapshots/<snapshotId>/eligible.json`. Snapshot 1's root was
+posted on 2026-09-27, and the committed `public/claim-config.json` carries its values.
 
 Both `pnpm build` and `wrangler deploy --dry-run` intentionally fail while any
 placeholder remains. Wrangler's custom build invokes the same validation before

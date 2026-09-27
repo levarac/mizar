@@ -61,7 +61,7 @@ The Alcor service is deployed in World ID staging. On **2026-09-26**, a real Wor
 
 **Staging compatibility mode:** to run the multi-device demo on staging, Alcor accepts World ID 3.0 legacy proofs requested through IDKit 4's legacy compatibility path ([levarac/alcor#9](https://github.com/levarac/alcor/pull/9)). The verify API is still World's v4 endpoint, but the proof protocol is World ID 3.0, and the World ID Simulator generates those proofs in the browser from the selected test identity, so distinct Simulator identities give distinct nullifiers (read from the World ID Simulator source; not yet confirmed in a live run). The proof stays bound to the event, event key and challenge. The mode is staging-only; Alcor rejects legacy proofs in production. It does not demonstrate native World ID 4.0 multi-identity behavior or real humans. Mizar's evaluator is unchanged: it checks Alcor's signed credentials, not the World proof protocol.
 
-The claim page's camera-ready design and read-only rule card are merged at `a798d1b`. The card loads the published parameters by URL and verifies their SHA-256 before displaying the rule. Deployment remains pending the first non-empty snapshot. The page has a Sepolia deployment configuration with the supplied contract address and explicit placeholders for the posted snapshot. Its production build refuses those placeholders; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
+The claim page's camera-ready design and read-only rule card are merged at `a798d1b`. The card loads the published parameters by URL and verifies their SHA-256 before displaying the rule. The page is deployed at [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) and, as checked on 2026-09-27, serves snapshot 1's configuration: snapshot ID 1 and root `0xc93754d561eeb827c89ef5c682fcedc26bd0e706ab21ba76b2e4a78a734fbaa9`. Its production build refuses placeholder values; see [claim page deployment](web/README.md). Passing local tests does not establish a working live join-to-claim flow.
 
 ## Recorded synthetic rule comparison
 
@@ -107,7 +107,7 @@ flowchart TD
     end
 ```
 
-This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging; the claim page and first snapshot are still pending. The local E2E run substitutes Anvil and MockEAS. Beid itself is pre-existing; its typed signing entry point is a hackathon integration change.
+This diagram describes the integration design. The Mizar claim contract and schema are deployed on Sepolia, and Alcor is deployed as a Cloudflare Worker in World ID staging. On 2026-09-27 snapshot 1's root was posted to the claim contract, and the deployed claim page serves that snapshot. The local E2E run substitutes Anvil and MockEAS. Beid itself is pre-existing; its typed signing entry point is a hackathon integration change.
 
 ## Pre-existing work and hackathon contributions
 
@@ -155,9 +155,9 @@ The Mizar claim contract and EAS schema are deployed on **Sepolia, chain ID `111
 | Alcor source at live verification | `af9bde3` on Alcor `main`, as recorded in the [2026-09-26 live verification](https://github.com/levarac/alcor/issues/1#issuecomment-5844855062) |
 | Alcor D1 database | `alcor-human-check` |
 | Live World ID staging verification | One credential issued; second event key with the same World ID rejected with `409 credential_already_exists` on 2026-09-26 |
-| Live Sepolia evaluation | Read-only rehearsal completed on 2026-09-26; 0 eligible, no root posted |
-| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — design and rule card merged; deployment pending the first non-empty snapshot |
-| Public root / claim transaction | Pending the first non-empty snapshot and a live claim |
+| Live Sepolia evaluation | Read-only rehearsal on 2026-09-26: 0 eligible, no root posted. Snapshot 1 on 2026-09-27 at cutoff block [11789682](https://sepolia.etherscan.io/block/11789682): 3 eligible |
+| Claim page | [levarac-mizar-claim.levarac.workers.dev](https://levarac-mizar-claim.levarac.workers.dev/) — deployed; serves snapshot 1's configuration (checked 2026-09-27) |
+| Public root / claim transaction | Snapshot 1 root `0xc93754d561eeb827c89ef5c682fcedc26bd0e706ab21ba76b2e4a78a734fbaa9` posted on 2026-09-27 09:31 JST in [0xea67f377c71e4254934e3aa78718a3d91501427091880d8fdd6078bcbe517edb](https://sepolia.etherscan.io/tx/0xea67f377c71e4254934e3aa78718a3d91501427091880d8fdd6078bcbe517edb), block [11789764](https://sepolia.etherscan.io/block/11789764). No claim transaction as of block 11791445 (2026-09-27) |
 
 The root poster was configured to be the event registrar; the contract does not derive it from the registry. The Parallax evidence registry is a separate deployment. Local Anvil addresses printed by the E2E runner are not Sepolia deployments. Golden vectors and fixtures retain their existing test event IDs and addresses, as explained in the [specification](docs/design/spec.md#shared-formats).
 
@@ -216,7 +216,7 @@ pnpm typecheck
 pnpm build
 ```
 
-These are local tests and a static build. The build intentionally fails until `web/public/claim-config.json` and its snapshot assets are complete. The [Worker configuration and release instructions](web/README.md) describe the fixed URL, public RPC, same-origin assets and local dry-run. A successful build is not a verified app callback or wallet transaction.
+These are local tests and a static build. The build intentionally fails while `web/public/claim-config.json` holds placeholders or its snapshot assets are incomplete; the committed configuration carries snapshot 1's values. The [Worker configuration and release instructions](web/README.md) describe the fixed URL, public RPC, same-origin assets and local dry-run. A successful build is not a verified app callback or wallet transaction.
 
 During callback handling, the page replaces a stored claim only after fully verifying the callback: a pending request must exist, its state must match, the public key must derive the supplied event-key address, and the signature must verify against that key for the configured event, chain, contract and pending recipient. A rejected or malformed callback leaves the stored claim unchanged. See [`web/src/main.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/main.ts) and [`web/src/codec.ts`](https://github.com/levarac/mizar/blob/bf91f6658980019d502993f6e33720cd39f11006/web/src/codec.ts). The historical test results below predate this callback fix.
 
