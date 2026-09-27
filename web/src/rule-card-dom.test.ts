@@ -1,9 +1,14 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import html from "../index.html?raw";
-import config from "../public/claim-config.json";
 import params from "./fixtures/params.json?raw";
 import { loadRules } from "./rule-card";
+
+const config = {
+  paramsUrl: "https://example.org/params.json",
+  paramsSha256: "1d216f7c0d1e6d5006c019c1a218c82421bf3f1e17065aae1981d058dbd01f08",
+  eventId: JSON.parse(params).eventId,
+};
 
 const status = () => document.querySelector<HTMLElement>("#rules-status")!;
 
