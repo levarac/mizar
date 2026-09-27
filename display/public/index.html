@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
+  <meta name="description" content="Live view of signed phone-to-phone encounters at a Parallax demo event, anchored on Sepolia.">
+  <title>Parallax encounters</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <main class="screen">
+    <header class="top">
+      <div class="title">
+        <p class="chips"><span class="chip mode" id="mode">LOADING</span><span class="chip noncanonical" title="Presentation sidecar, not a canonical evaluation output">NON-CANONICAL</span><span class="chip quiet" id="lag"></span></p>
+        <h1>Parallax <span>encounters</span></h1>
+        <p class="sub" id="event">Signed phone-to-phone observations, anchored on Sepolia.</p>
+      </div>
+      <dl class="stats" aria-label="Totals at the shown slot">
+        <div><dt>Event keys</dt><dd id="stat-keys">–</dd></div>
+        <div><dt>Human-checked</dt><dd id="stat-human">–</dd></div>
+        <div><dt>Mutual pairs</dt><dd id="stat-pairs">–</dd></div>
+        <div><dt>Meet the rule</dt><dd id="stat-pass">–</dd></div>
+      </dl>
+    </header>
+
+    <p class="banner" id="banner" role="status" hidden></p>
+
+    <section class="stage">
+      <figure class="graph">
+        <svg id="graph" viewBox="0 0 1000 800" role="img" aria-label="Event keys and their mutual encounters"></svg>
+        <figcaption>
+          <span class="slot-now" id="slot-now">–</span>
+          <span class="legend"><i class="l-complete"></i>counts, 2+ slots <i class="l-progress"></i>counts, 1 slot <i class="l-uncounted"></i>does not count: a key lacks the human check</span>
+        </figcaption>
+      </figure>
+      <aside class="side">
+        <section class="rule" aria-label="Rule">
+          <p class="label">THE RULE</p>
+          <p class="rule-text" id="rule-text">Meet 2 human-checked people, each in 2 different 5-minute slots.</p>
+        </section>
+        <section class="keys" aria-label="Rule status per key">
+          <h2>Event keys <span id="keys-note"></span></h2>
+          <ol id="keys"></ol>
+        </section>
+        <section class="anchors" aria-label="Commitments anchored on Sepolia">
+          <h2>Anchored on Sepolia <span id="anchors-note"></span></h2>
+          <ol id="anchors"></ol>
+        </section>
+      </aside>
+    </section>
+
+    <section class="timeline" aria-label="Time slots">
+      <div class="bars" id="bars" aria-hidden="true"></div>
+      <input id="scrub" type="range" min="0" max="0" value="0" aria-label="Time slot">
+      <div class="transport">
+        <span class="slot-range" id="slot-range"></span>
+        <button id="replay" type="button">Replay</button>
+        <button id="live" type="button" class="on">Live</button>
+      </div>
+    </section>
+
+    <footer class="honest" id="honest"></footer>
+  </main>
+</body>
+</html>
