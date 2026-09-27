@@ -1,7 +1,10 @@
 import { friendlyError, setPurpose, showState, showTransaction, type ClaimView } from "./presentation";
+import QRCode from "qrcode";
 import {
+  createPublicClient,
   createWalletClient,
   custom,
+  http,
   defineChain,
   getAddress,
   isAddress,
@@ -12,11 +15,15 @@ import {
 } from "viem";
 import {
   acceptClaimCallback,
+  acceptHandoffClaim,
   callbackError,
   claimAbi,
   claimAppLink,
   groupAddress,
+  handoffFragment,
+  metamaskDappLink,
   parseCallbackFragment,
+  parseHandoffFragment,
 } from "./codec";
 import { claimPageConfig } from "./config";
 import {
@@ -38,6 +45,11 @@ const recipientGrouped = document.querySelector<HTMLElement>("#recipient-grouped
 const signButton = document.querySelector<HTMLButtonElement>("#sign")!;
 const submitButton = document.querySelector<HTMLButtonElement>("#submit")!;
 const signatureEl = document.querySelector<HTMLElement>("#signature")!;
+const handoffEl = document.querySelector<HTMLElement>("#handoff");
+const handoffMetamask = document.querySelector<HTMLAnchorElement>("#handoff-metamask");
+const handoffCopy = document.querySelector<HTMLButtonElement>("#handoff-copy");
+const handoffQr = document.querySelector<HTMLImageElement>("#handoff-qr");
+let handoffUrl = "";
 setPurpose(claimPageConfig.eventId);
 let hasStatusError = false;
 let recipientErrorReturnState: ClaimView = "idle";
@@ -96,12 +108,50 @@ function render(session: Session, eligible?: EligibleKey | null): void {
     ? `Signature stored for ${groupAddress(session.claim.recipient)}.`
     : "No claim signature yet.";
   submitButton.disabled = !session.claim || eligible === null;
+  renderHandoff(session, eligible);
   if (!hasStatusError) {
     showState(!session.eventKeyAddress ? (hasPendingRecipient ? "signature" : "idle")
       : eligible === undefined ? "lookup" : eligible === null ? "not-eligible"
       : session.claim ? "ready" : hasPendingRecipient ? "signature" : "recipient");
   }
 }
+
+function renderHandoff(session: Session, eligible?: EligibleKey | null): void {
+  if (!handoffEl) return;
+  const claim = session.claim;
+  if (!claim || eligible === null) {
+    handoffEl.hidden = true;
+    return;
+  }
+  const fragment = handoffFragment({
+    snapshotId: claimPageConfig.snapshotId,
+    eventKeyAddress: claim.eventKeyAddress,
+    recipient: claim.recipient,
+    signature: claim.signature,
+    compressedKey: claim.compressedKey,
+  });
+  const page = `${window.location.origin}${window.location.pathname}`;
+  const url = `${page}#${fragment}`;
+  handoffEl.hidden = false;
+  if (url === handoffUrl) return;
+  handoffUrl = url;
+  const metamask = metamaskDappLink(page, fragment);
+  if (handoffMetamask) handoffMetamask.href = metamask;
+  if (handoffQr) {
+    // Encodes the MetaMask link, so a phone camera opens MetaMask directly.
+    void QRCode.toDataURL(metamask, { margin: 1, width: 440, errorCorrectionLevel: "L" })
+      .then((src) => { handoffQr.src = src; })
+      .catch(() => { handoffQr.hidden = true; });
+  }
+}
+
+handoffCopy?.addEventListener("click", () => {
+  if (!handoffUrl) return;
+  void navigator.clipboard?.writeText(handoffUrl).then(
+    () => { handoffCopy.textContent = "Copied"; },
+    () => { handoffCopy.textContent = "Copy failed; long-press the MetaMask link instead"; },
+  );
+});
 
 function readRecipient(): Address | null {
   const value = recipientInput.value.trim();
@@ -190,7 +240,7 @@ submitButton.addEventListener("click", async () => {
     assertProofRoot(proofFile, claimPageConfig.expectedRoot);
     const client = createWalletClient({ chain, transport: custom(ethereum) });
     const [account] = await client.requestAddresses();
-    const hash = await client.writeContract({
+    const call = {
       account,
       address: claimPageConfig.claimContract,
       abi: claimAbi,
@@ -202,7 +252,10 @@ submitButton.addEventListener("click", async () => {
         claim.recipient,
         claim.signature,
       ],
-    });
+    } as const;
+    // Simulate first so a tampered or already-spent claim fails before the wallet prompt.
+    await createPublicClient({ chain, transport: http(claimPageConfig.rpcUrl) }).simulateContract(call);
+    const hash = await client.writeContract(call);
     setStatus(`Claim submitted: ${hash}`);
   } catch (error) {
     setStatus(error instanceof Error ? error.message : "Claim submission failed.", true);
@@ -211,9 +264,46 @@ submitButton.addEventListener("click", async () => {
 
 recipientInput.addEventListener("input", showRecipient);
 
-async function boot(): Promise<void> {
-  let session = loadSession();
+// Handles an app callback or a claim handoff in the URL fragment. The fragment is read
+// before it is cleared. Runs at load and on hashchange, because returning to an already
+// open tab with only a new fragment does not reload the page.
+async function processFragment(session: Session): Promise<Session> {
   const hash = window.location.hash;
+  let handoff;
+  try {
+    handoff = parseHandoffFragment(hash);
+  } catch (error) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    setStatus(error instanceof Error ? error.message : "Claim link rejected.", true);
+    return session;
+  }
+  if (handoff) {
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+    try {
+      const accepted = await acceptHandoffClaim({
+        handoff,
+        snapshotId: claimPageConfig.snapshotId,
+        eventId: claimPageConfig.eventId,
+        chainId: BigInt(claimPageConfig.chainId),
+        claimContract: claimPageConfig.claimContract,
+      });
+      session = {
+        eventKeyAddress: accepted.eventKeyAddress,
+        pending: undefined,
+        claim: {
+          recipient: accepted.recipient,
+          eventKeyAddress: accepted.eventKeyAddress,
+          signature: accepted.signature,
+          compressedKey: accepted.compressedKey,
+        },
+      };
+      saveSession(session);
+      setStatus("Signed claim imported.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : "Claim link rejected.", true);
+    }
+    return session;
+  }
   if (callbackError(hash) === "cancelled") {
     setStatus("The app cancelled the signature.", true);
     history.replaceState(null, "", window.location.pathname + window.location.search);
@@ -247,7 +337,15 @@ async function boot(): Promise<void> {
       setStatus(error instanceof Error ? error.message : "Callback rejected.", true);
     }
   }
+  return session;
+}
 
+async function boot(): Promise<void> {
+  const session = await processFragment(loadSession());
+  await refresh(session);
+}
+
+async function refresh(session: Session): Promise<void> {
   render(session);
   if (session.eventKeyAddress) {
     try {
@@ -264,5 +362,11 @@ async function boot(): Promise<void> {
     showRecipient();
   }
 }
+
+window.addEventListener?.("hashchange", () => {
+  // A stale module instance (its page elements detached) must not consume the fragment.
+  if (!window.location.hash || !document.contains(statusEl)) return;
+  void processFragment(loadSession()).then(refresh);
+});
 
 void boot();
