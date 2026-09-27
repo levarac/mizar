@@ -83,6 +83,18 @@
                 >View transaction <span aria-hidden="true">↗</span></a
               >
             </div>
+            <div id="handoff" class="handoff" hidden>
+              <p class="eyebrow">SUBMIT FROM YOUR WALLET</p>
+              <p class="helper">
+                No wallet in this browser? Open the signed claim in your wallet's browser. The link carries
+                only public data: the event key, the recipient and the app signature, which is bound to that recipient.
+              </p>
+              <div class="actions">
+                <a id="handoff-metamask" class="primary-link" rel="noopener noreferrer">Open in MetaMask <span aria-hidden="true">↗</span></a>
+                <button id="handoff-copy" type="button">Copy claim link</button>
+              </div>
+              <img id="handoff-qr" class="handoff-qr" alt="QR code with the signed claim link for a wallet browser" width="220" height="220" />
+            </div>
           </div>
           <div class="evidence-summary">
             <div>

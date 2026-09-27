@@ -229,3 +229,77 @@ export function groupAddress(address: Address): string {
   }
   return `0x${groups.join(" ")}`;
 }
+
+/**
+ * A signed claim carried in a URL fragment, so a wallet's in-app browser can submit it
+ * without the localStorage session of the browser that received the app callback.
+ * Every field is public; the app signature binds the recipient, event, chain and contract.
+ */
+export type HandoffClaim = {
+  snapshotId: number;
+  eventKeyAddress: Address;
+  recipient: Address;
+  signature: Hex;
+  compressedKey: Hex;
+};
+
+const HANDOFF_MARKER = "mizar-claim";
+
+export function handoffFragment(claim: HandoffClaim): string {
+  const params = new URLSearchParams({
+    [HANDOFF_MARKER]: "1",
+    s: String(claim.snapshotId),
+    a: claim.eventKeyAddress,
+    r: claim.recipient,
+    sig: claim.signature,
+    k: claim.compressedKey,
+  });
+  return params.toString();
+}
+
+/** Returns null when the fragment is not a claim handoff. */
+export function parseHandoffFragment(fragment: string): HandoffClaim | null {
+  const raw = fragment.startsWith("#") ? fragment.slice(1) : fragment;
+  const params = new URLSearchParams(raw);
+  if (params.get(HANDOFF_MARKER) !== "1") return null;
+  const s = params.get("s"), a = params.get("a"), r = params.get("r"), sig = params.get("sig"), k = params.get("k");
+  if (s === null || a === null || r === null || sig === null || k === null) {
+    throw new Error("claim handoff is missing s, a, r, sig, or k");
+  }
+  if (!/^[1-9][0-9]{0,18}$/.test(s)) throw new Error("claim handoff snapshot id is invalid");
+  if (!isAddress(a) || !isAddress(r)) throw new Error("claim handoff address is invalid");
+  if (!isHex(sig) || hexToBytes(sig).length !== 65) throw new Error("sig must be 65 bytes");
+  if (!isHex(k) || hexToBytes(k).length !== 33) throw new Error("k must be a 33-byte compressed key");
+  return { snapshotId: Number(s), eventKeyAddress: getAddress(a), recipient: getAddress(r), signature: sig, compressedKey: k };
+}
+
+/** Checks an imported claim the same way as an app callback, minus the per-browser state. */
+export async function acceptHandoffClaim(args: {
+  handoff: HandoffClaim;
+  snapshotId: number;
+  eventId: Hex;
+  chainId: bigint;
+  claimContract: Address;
+}): Promise<HandoffClaim> {
+  const { handoff } = args;
+  if (handoff.snapshotId !== args.snapshotId) throw new Error("claim handoff is for a different snapshot");
+  if (addressFromCompressedKey(handoff.compressedKey) !== handoff.eventKeyAddress) {
+    throw new Error("event key address does not match k");
+  }
+  const message = claimMessageBytes({
+    eventId: args.eventId,
+    chainId: args.chainId,
+    claimContract: args.claimContract,
+    recipient: handoff.recipient,
+  });
+  if (await recoverClaimSigner(message, handoff.signature) !== handoff.eventKeyAddress) {
+    throw new Error("recovered signer does not match the event key");
+  }
+  return handoff;
+}
+
+/** MetaMask mobile opens https://metamask.app.link/dapp/<host><path> in its in-app browser. */
+export function metamaskDappLink(pageUrl: string, fragment: string): string {
+  const url = new URL(pageUrl);
+  return `https://metamask.app.link/dapp/${url.host}${url.pathname}#${fragment}`;
+}
