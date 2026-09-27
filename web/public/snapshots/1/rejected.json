@@ -1,0 +1,25 @@
+{
+  "keys": [
+    {
+      "address": "0x30615b79fA5252f8c1cCcDDFC37C082F81b31074",
+      "reason": "not_credentialed",
+      "partnerCount": 0,
+      "qualifyingPartners": 0
+    },
+    {
+      "address": "0xBcC486132bEe92569897a615Db42f3E29Cdc203f",
+      "reason": "not_credentialed",
+      "partnerCount": 0,
+      "qualifyingPartners": 0
+    },
+    {
+      "address": "0xea6677CD68272726a3A088E4798D398573C08763",
+      "reason": "too_few_partners",
+      "partnerCount": 0,
+      "qualifyingPartners": 0
+    }
+  ],
+  "rpidConflicts": [],
+  "invalidObservations": [],
+  "invalidCredentials": []
+}
