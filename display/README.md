@@ -42,6 +42,9 @@ npm test                   # round trips against the evaluator's exporter
 npm run live -- --host 0.0.0.0
 ```
 
+The `build`, `feed`, `live` and `test` scripts run the evaluator's tsx
+(`../evaluator/node_modules/.bin/tsx`), so install the evaluator first.
+
 `npm run live` refreshes `dist/live.json` every 120 seconds (about a minute per
 refresh, mostly registry reads) and serves `dist/` on port 4180. `--host 0.0.0.0`
 makes it reachable from a phone on the same network; the default is
@@ -81,6 +84,25 @@ Other `feed.ts` options: `--snapshot <evaluation dir>` (recorded, offline),
   key's final credential state.
 - **NON-CANONICAL.** The exporter's notice is shown verbatim.
 
+## Data shipped to the browser
+
+`live.json` and `snapshot-1.json` carry full event-key addresses
+(`keys[].address`, `pairs[].a` and `b`, `outcome.eligible`, `posted.eligible`)
+and each pair's slot indices. The screen shows only the tag and four hex digits,
+but anyone can read the addresses from the JSON. This adds no new exposure: each
+signed observation in the operator's evidence carries its event key, the Alcor
+credential list names the address of every human-checked key, and the published
+snapshot's `eligible.json` lists its keys; the slot indices can be recomputed
+from the same evidence. Human-check times are not in the feed.
+
+## Static hosting
+
+- The CSP and security headers come from `serve.mjs`. A plain static host drops
+  them, so a deployment must add equivalent headers, for example a `_headers`
+  file as `site/try` does.
+- A static copy of `dist/` serves whatever `live.json` it was given; the page
+  labels recorded data and flags a live feed older than eight minutes.
+
 ## Limits
 
 - Slot times are window index × 300 seconds, the slot length in the claim page
@@ -90,5 +112,3 @@ Other `feed.ts` options: `--snapshot <evaluation dir>` (recorded, offline),
   linked to that person by a bystander. The display adds no timing beyond the
   public lists, but it does make them easy to watch.
 - Two keys can share an animal; the colour and the four hex digits tell them apart.
-- A static deployment of `dist/` serves whatever `live.json` it was given; the
-  page labels recorded data and flags a live feed older than eight minutes.
