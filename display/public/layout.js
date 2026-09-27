@@ -48,10 +48,21 @@ export function ringPositions(order, { width = 1000, height = 800, margin = 110 
   const cy = top + (height - top - bottom) / 2;
   const rx = Math.max(0, width / 2 - margin * 1.2), ry = Math.max(0, (height - top - bottom) / 2);
   if (n === 1) return new Map([[order[0], { x: cx, y: cy }]]);
-  // Two keys sit side by side; more go round the ring starting at the top.
-  const start = n === 2 ? Math.PI : -Math.PI / 2;
+  // Two keys sit side by side; more go round the ring starting at the top. Keys are
+  // spaced by arc length, since equal angles bunch up at the ends of a wide ellipse.
+  const start = n === 2 ? Math.PI : -Math.PI / 2, samples = 720;
+  const points = [], lengths = [0];
+  for (let k = 0; k <= samples; k++) {
+    const t = start + (2 * Math.PI * k) / samples;
+    points.push({ x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) });
+    if (k) lengths.push(lengths[k - 1] + Math.hypot(points[k].x - points[k - 1].x, points[k].y - points[k - 1].y));
+  }
+  let k = 1;
   return new Map(order.map((address, i) => {
-    const angle = start + (2 * Math.PI * i) / n;
-    return [address, { x: cx + rx * Math.cos(angle), y: cy + ry * Math.sin(angle) }];
+    const target = (lengths[samples] * i) / n;
+    while (k < samples && lengths[k] < target) k++;
+    const f = lengths[k] === lengths[k - 1] ? 0 : (target - lengths[k - 1]) / (lengths[k] - lengths[k - 1]);
+    const a = points[k - 1], b = points[k];
+    return [address, { x: a.x + (b.x - a.x) * Math.max(0, f), y: a.y + (b.y - a.y) * Math.max(0, f) }];
   }));
 }

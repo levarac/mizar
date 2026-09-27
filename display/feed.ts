@@ -143,6 +143,10 @@ async function fromLive(o: Options, rpc: string): Promise<Source> {
   const probe = await readAnchorsFromRegistry(rpc, baseline.commitmentRegistry, baseline.eventId,
     baseline.chainId, fromBlock, pages, fromBlock);
   const newest = Math.min(latest, Math.max(fromBlock, ...Object.values(probe.mapping)));
+  // As in the evaluator, match the admission (and so the operator whose records count)
+  // to the chain before the completeness check relies on it.
+  await checkAdmissionRegistries(rpc, baseline.chainId, baseline.eventRegistry, baseline.definitionRegistry,
+    baseline.eventId, newest, pages, fromBlock);
   let cutoffBlock = newest, anchored;
   for (;;) {
     try {
@@ -155,9 +159,9 @@ async function fromLive(o: Options, rpc: string): Promise<Source> {
       cutoffBlock = newest - 1;
     }
   }
+  if (cutoffBlock !== newest) await checkAdmissionRegistries(rpc, baseline.chainId, baseline.eventRegistry,
+    baseline.definitionRegistry, baseline.eventId, cutoffBlock, pages, fromBlock);
   const params: Parameters = { ...baseline, snapshot: { id: 0, cutoffBlock, cutoffTimestamp: anchored.cutoffTimestamp } };
-  await checkAdmissionRegistries(rpc, params.chainId, params.eventRegistry!, params.definitionRegistry!,
-    params.eventId, cutoffBlock, pages, fromBlock);
   const servedSequence = Math.max(0, ...pages.flatMap(page => page.commitments.map(c => c.anchor.sequence)));
   const unserved = await unservedAnchors(rpc, params.commitmentRegistry!, params.eventId,
     pages[0].admission.anchorRegistration.operator, newest, servedSequence);
