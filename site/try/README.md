@@ -16,8 +16,14 @@ No trackers, analytics or third-party scripts; Inter is self-hosted from
 ```sh
 (cd evaluator && pnpm install --frozen-lockfile --ignore-workspace)
 (cd docs/demo/graph && pnpm install --frozen-lockfile --ignore-workspace)
+(cd site/try && pnpm install --frozen-lockfile --ignore-workspace)
 node site/try/build.mjs
 ```
+
+The build also renders each `<div class="qr" data-qr="URL">` placeholder in
+`index.html` to an inline SVG QR code (`qrcode`), so the page makes no extra
+request for them. The QR codes show from 720 px wide; on phones the link below
+each one is tapped instead.
 
 Preview `dist/` with any static server, for example
 `npx wrangler dev` from `site/try/`.
