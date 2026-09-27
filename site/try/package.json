@@ -1,0 +1,11 @@
+{
+  "name": "levarac-try-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "qrcode": "1.5.4"
+  }
+}
