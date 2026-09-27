@@ -135,9 +135,11 @@ function renderHandoff(session: Session, eligible?: EligibleKey | null): void {
   handoffEl.hidden = false;
   if (url === handoffUrl) return;
   handoffUrl = url;
-  if (handoffMetamask) handoffMetamask.href = metamaskDappLink(page, fragment);
+  const metamask = metamaskDappLink(page, fragment);
+  if (handoffMetamask) handoffMetamask.href = metamask;
   if (handoffQr) {
-    void QRCode.toDataURL(url, { margin: 1, width: 440, errorCorrectionLevel: "L" })
+    // Encodes the MetaMask link, so a phone camera opens MetaMask directly.
+    void QRCode.toDataURL(metamask, { margin: 1, width: 440, errorCorrectionLevel: "L" })
       .then((src) => { handoffQr.src = src; })
       .catch(() => { handoffQr.hidden = true; });
   }
