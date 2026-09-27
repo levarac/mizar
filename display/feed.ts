@@ -12,7 +12,7 @@ import { fileURLToPath } from "node:url";
 import { loadEnvelopes, readSource } from "../evaluator/src/io.js";
 import { checkAdmissionRegistries, configureLogReads, readAnchorsFromRegistry, readPostedRoot } from "../evaluator/src/chain.js";
 import { verifyEvidence, type Envelope } from "../evaluator/src/evidence.js";
-import { evaluateRule, verifyCredentials, type CredentialList, type Parameters } from "../evaluator/src/evaluate.js";
+import { evaluateRule, type CredentialList, type Parameters } from "../evaluator/src/evaluate.js";
 import { graph } from "../evaluator/src/graph.js";
 import { anchorList, checkRoundTrip, compactFrames } from "./lib/compact.mjs";
 import { startServer } from "./serve.mjs";
@@ -29,6 +29,7 @@ interface Options {
 interface Source {
   params: Parameters; pages: Envelope[]; credentials: CredentialList;
   blocks: Record<string, number>; exported: any;
+  unserved?: Array<{ sequence: number; block: number; committedAt: number }> | null;
 }
 interface ClaimConfig {
   chainId: number; claimContract: string; snapshotId: number; expectedRoot: string; slotSeconds: number;
@@ -72,16 +73,37 @@ function rpcUrl(source?: string): string {
   return value;
 }
 
-async function latestBlock(rpc: string): Promise<number> {
+async function rpcCall(rpc: string, method: string, params: unknown[]): Promise<any> {
   try {
     const response = await fetch(rpc, { method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_blockNumber", params: [] }) });
-    const block = Number(BigInt((await response.json()).result));
-    if (!Number.isSafeInteger(block)) throw new Error();
-    return block;
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+    const body = await response.json();
+    if (body.error || body.result === undefined) throw new Error();
+    return body.result;
   } catch {
     throw new Error("RPC unavailable"); // never echo the endpoint
   }
+}
+const latestBlock = async (rpc: string) => Number(BigInt(await rpcCall(rpc, "eth_blockNumber", [])));
+
+// keccak256("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)"), the
+// event evaluator/src/chain.ts reads; topics are [signature, eventId, sequence, digest].
+const COMMITMENT_RECORDED = "0xe2c93b49f121cf4c80ee3fa7232d78edf0d07579022e8895d0b407c4f51ff003";
+
+// Commitments the registered operator recorded on chain after the newest one it serves.
+// They only show that an anchor has landed: their evidence is not published yet, so
+// nothing but sequence, block and commit time is taken from them.
+async function unservedAnchors(rpc: string, registry: string, eventId: string, operator: string,
+  fromBlock: number, servedSequence: number) {
+  try {
+    const logs: any[] = await rpcCall(rpc, "eth_getLogs", [{ address: registry, fromBlock: "0x" + fromBlock.toString(16),
+      toBlock: "latest", topics: [COMMITMENT_RECORDED, "0x" + eventId.replace(/^0x/, "").toLowerCase().padStart(64, "0")] }]);
+    return logs.map(log => ({ sequence: Number(BigInt(log.topics[2])), block: Number(BigInt(log.blockNumber)),
+      recorder: String(log.data).slice(2 + 64 + 24, 2 + 128).toLowerCase(),
+      committedAt: Number(BigInt("0x" + String(log.data).slice(2 + 128, 2 + 192))) }))
+      .filter(r => r.recorder === operator.toLowerCase().replace(/^0x/, "") && r.sequence > servedSequence)
+      .map(({ recorder: _recorder, ...r }) => r).sort((a, b) => a.sequence - b.sequence);
+  } catch { return null; } // unknown, not empty
 }
 
 const json = async (path: string) => JSON.parse(await readFile(path, "utf8"));
@@ -109,18 +131,36 @@ async function fromLive(o: Options, rpc: string): Promise<Source> {
   configureLogReads(o.minLogSpan, o.maxLogCalls); // the call budget is per refresh
   const paramsPath = resolve(o.params), base = dirname(paramsPath);
   const { snapshot: _unused, rpcUrl: _dropped, ...baseline } = await json(paramsPath);
-  // Fix the cutoff before reading evidence, so commitments that land meanwhile
-  // fall after the cutoff instead of looking omitted.
-  const cutoffBlock = (await latestBlock(rpc)) - o.confirmations;
-  const params: Parameters = { ...baseline, snapshot: { id: 0, cutoffBlock, cutoffTimestamp: 0 } };
-  const fromBlock = o.fromBlock ?? params.registrationBlock ?? 0;
-  const pages = await loadEnvelopes(params.evidenceSource, base, params.eventId);
-  const credentials = JSON.parse((await readSource(params.credentialsSource, base)).toString());
+  const latest = (await latestBlock(rpc)) - o.confirmations;
+  const fromBlock = o.fromBlock ?? baseline.registrationBlock ?? 0;
+  const pages = await loadEnvelopes(baseline.evidenceSource, base, baseline.eventId);
+  const credentials = JSON.parse((await readSource(baseline.credentialsSource, base)).toString());
+  // The operator publishes a commitment some time after it lands on chain, so a
+  // cutoff at the chain head can precede evidence it has not served yet. First map
+  // the served commitments to their registry blocks (a cutoff at the lower bound
+  // makes no completeness claim), then cut at the newest served anchor and run the
+  // evaluator's full completeness check there.
+  const probe = await readAnchorsFromRegistry(rpc, baseline.commitmentRegistry, baseline.eventId,
+    baseline.chainId, fromBlock, pages, fromBlock);
+  const newest = Math.min(latest, Math.max(fromBlock, ...Object.values(probe.mapping)));
+  let cutoffBlock = newest, anchored;
+  for (;;) {
+    try {
+      anchored = await readAnchorsFromRegistry(rpc, baseline.commitmentRegistry, baseline.eventId,
+        baseline.chainId, cutoffBlock, pages, fromBlock);
+      break;
+    } catch (error) {
+      // Another commitment in the same block may not be served yet: cut one block earlier.
+      if (cutoffBlock !== newest || !/missing from evidence/.test(String(error))) throw error;
+      cutoffBlock = newest - 1;
+    }
+  }
+  const params: Parameters = { ...baseline, snapshot: { id: 0, cutoffBlock, cutoffTimestamp: anchored.cutoffTimestamp } };
   await checkAdmissionRegistries(rpc, params.chainId, params.eventRegistry!, params.definitionRegistry!,
     params.eventId, cutoffBlock, pages, fromBlock);
-  const anchored = await readAnchorsFromRegistry(rpc, params.commitmentRegistry!, params.eventId,
-    params.chainId, cutoffBlock, pages, fromBlock);
-  params.snapshot.cutoffTimestamp = anchored.cutoffTimestamp;
+  const servedSequence = Math.max(0, ...pages.flatMap(page => page.commitments.map(c => c.anchor.sequence)));
+  const unserved = await unservedAnchors(rpc, params.commitmentRegistry!, params.eventId,
+    pages[0].admission.anchorRegistration.operator, newest, servedSequence);
   // Record the verified inputs locally so the unchanged exporter replays them.
   const scratch = await mkdtemp(join(tmpdir(), "parallax-display-"));
   try {
@@ -132,7 +172,7 @@ async function fromLive(o: Options, rpc: string): Promise<Source> {
         credentialsSource: "credentials.json", anchorBlocksSource: "anchor-blocks.json" })),
     ]);
     const exported = await exportGraph({ params: join(scratch, "params.json") }, scratch);
-    return { params, pages, credentials, blocks: anchored.mapping, exported };
+    return { params, pages, credentials, blocks: anchored.mapping, exported, unserved };
   } finally { await rm(scratch, { recursive: true, force: true }); }
 }
 
@@ -166,7 +206,6 @@ function feedFrom(mode: string, source: Source, posted: unknown) {
   const { params, pages, credentials, blocks, exported } = source;
   const evidence = verifyEvidence(pages, params.eventId, params.snapshot.cutoffBlock, blocks);
   const evaluation = evaluateRule(params, evidence, credentials);
-  const { accepted } = verifyCredentials(credentials, params);
   const compact = compactFrames(exported);
   checkRoundTrip(exported, compact);
   const definition = pages[0].admission.definitionAnchor;
@@ -178,9 +217,12 @@ function feedFrom(mode: string, source: Source, posted: unknown) {
     outcome: { root: evaluation.root, eligible: evaluation.eligible.map(e => e.address) },
     posted,
     slots: compact.slots,
-    keys: compact.keys.map(key => ({ ...key, verifiedAt: accepted.get(key.address.toLowerCase())?.verifiedAt ?? null })),
+    // No human-check times: on a big screen they would let bystanders link a key to a person.
+    keys: compact.keys,
     pairs: compact.pairs,
     anchors: anchorList(pages, blocks, params.snapshot.cutoffBlock, evidence),
+    // Live only: anchors on chain whose evidence the operator has not published yet (null: unknown).
+    unservedAnchors: source.unserved ?? null,
     diagnostics: { observations: evidence.observations.length, invalidObservations: evidence.invalid.length,
       invalidCredentials: evaluation.invalidCredentials.length, rpidConflicts: evaluation.rpidConflicts.length },
   };
@@ -204,6 +246,8 @@ async function produce(o: Options) {
 async function main() {
   const o = options(process.argv.slice(2));
   const out = resolve(o.out), statusPath = join(dirname(out), "status.json");
+  // Refresh status is a live-feed concept; a recorded archive has none.
+  const status = (value: unknown) => o.snapshot ? Promise.resolve() : writeAtomic(statusPath, value);
   if (o.serve) startServer({ root: dirname(out), host: o.host, port: o.port });
   let lastSuccess: string | null = null;
   for (;;) {
@@ -212,14 +256,14 @@ async function main() {
       const feed = await produce(o);
       await writeAtomic(out, feed);
       lastSuccess = feed.generatedAt;
-      await writeAtomic(statusPath, { ok: true, lastAttemptAt: feed.generatedAt, lastSuccessAt: lastSuccess, error: null });
+      await status({ ok: true, lastAttemptAt: feed.generatedAt, lastSuccessAt: lastSuccess, error: null });
       console.log(`${feed.mode}: ${feed.keys.length} keys, ${feed.pairs.length} pairs, ${feed.anchors.length} anchors, ` +
         `cutoff block ${feed.cutoff.block}, ${Math.round((Date.now() - started) / 1000)} s`);
     } catch (error) {
       const reason = (error instanceof Error ? error.message : String(error)).slice(0, 160);
       console.error(`refresh failed: ${reason}`);
       // Keep the last good live.json; only the status says the feed is behind.
-      await writeAtomic(statusPath, { ok: false, lastAttemptAt: new Date().toISOString(), lastSuccessAt: lastSuccess, error: reason });
+      await status({ ok: false, lastAttemptAt: new Date().toISOString(), lastSuccessAt: lastSuccess, error: reason });
       if (o.watch === undefined) process.exit(2);
     }
     if (o.watch === undefined) return;

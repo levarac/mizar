@@ -8,6 +8,6 @@
     "live": "../evaluator/node_modules/.bin/tsx feed.ts --watch 120 --serve",
     "feed": "../evaluator/node_modules/.bin/tsx feed.ts",
     "serve": "node serve.mjs",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.mjs"
   }
 }

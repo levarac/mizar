@@ -15,6 +15,7 @@
       <div class="title">
         <p class="chips"><span class="chip mode" id="mode">LOADING</span><span class="chip noncanonical" title="Presentation sidecar, not a canonical evaluation output">NON-CANONICAL</span><span class="chip quiet" id="lag"></span></p>
         <h1>Parallax <span>encounters</span></h1>
+        <p class="rule"><b>The rule</b> <span id="rule-text">Meet 2 human-checked people, each in 2 different 5-minute slots.</span></p>
         <p class="sub" id="event">Signed phone-to-phone observations, anchored on Sepolia.</p>
       </div>
       <dl class="stats" aria-label="Totals at the shown slot">
@@ -29,17 +30,14 @@
 
     <section class="stage">
       <figure class="graph">
+        <p class="toast" id="toast" role="status" hidden></p>
         <svg id="graph" viewBox="0 0 1000 800" role="img" aria-label="Event keys and their mutual encounters"></svg>
         <figcaption>
           <span class="slot-now" id="slot-now">–</span>
-          <span class="legend"><i class="l-complete"></i>counts, 2+ slots <i class="l-progress"></i>counts, 1 slot <i class="l-uncounted"></i>does not count: a key lacks the human check</span>
+          <span class="legend"><span><i class="l-complete"></i>counts, 2+ slots</span><span><i class="l-progress"></i>counts, 1 slot</span><span><i class="l-uncounted"></i>does not count: a key lacks the human check</span><span>number = slots together</span></span>
         </figcaption>
       </figure>
       <aside class="side">
-        <section class="rule" aria-label="Rule">
-          <p class="label">THE RULE</p>
-          <p class="rule-text" id="rule-text">Meet 2 human-checked people, each in 2 different 5-minute slots.</p>
-        </section>
         <section class="keys" aria-label="Rule status per key">
           <h2>Event keys <span id="keys-note"></span></h2>
           <ol id="keys"></ol>

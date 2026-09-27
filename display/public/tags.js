@@ -8,9 +8,10 @@ export const ANIMALS = [
   ['🐧', 'Penguin'], ['🦒', 'Giraffe'], ['🐘', 'Elephant'], ['🦓', 'Zebra'], ['🐢', 'Turtle'], ['🐬', 'Dolphin'],
   ['🦈', 'Shark'], ['🦜', 'Parrot'], ['🐝', 'Bee'], ['🦋', 'Butterfly'], ['🐨', 'Koala'], ['🦔', 'Hedgehog'],
 ];
+// Hues spread far apart so two keys stay distinguishable on a projector.
 export const COLORS = [
-  ['Blue', '#4d86ff'], ['Coral', '#ff6b5e'], ['Mint', '#34d399'], ['Amber', '#f5b83d'], ['Violet', '#a78bfa'],
-  ['Teal', '#22c3c9'], ['Rose', '#f472b6'], ['Lime', '#a3e635'], ['Orange', '#fb923c'], ['Sky', '#7dd3fc'],
+  ['Blue', '#4d86ff'], ['Red', '#ff5a5a'], ['Green', '#34d399'], ['Gold', '#ffd23f'], ['Purple', '#b07cff'],
+  ['Cyan', '#22d3ee'], ['Pink', '#ff7ad9'], ['Lime', '#a3e635'], ['Orange', '#ff9f43'], ['Silver', '#cbd5e1'],
 ];
 
 // 32-bit FNV-1a over the lower-case address text.
