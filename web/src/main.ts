@@ -35,7 +35,7 @@ import {
   type EligibleKey,
   type ProofFile,
 } from "./eligibility";
-import { clearClaimIfDifferent, loadSession, saveSession, type Session } from "./session";
+import { clearClaimIfDifferent, loadSession, saveSession, type Session, type StoredClaim } from "./session";
 
 const statusEl = document.querySelector<HTMLElement>("#status")!;
 const eventKeyEl = document.querySelector<HTMLElement>("#event-key")!;
@@ -53,6 +53,7 @@ let handoffUrl = "";
 setPurpose(claimPageConfig.eventId);
 let hasStatusError = false;
 let recipientErrorReturnState: ClaimView = "idle";
+let displayedEligibility: EligibleKey | null | undefined;
 
 const chain = defineChain({
   id: claimPageConfig.chainId,
@@ -86,6 +87,7 @@ function describeEligibility(eligible: EligibleKey): string {
 }
 
 function render(session: Session, eligible?: EligibleKey | null): void {
+  displayedEligibility = eligible;
   const pendingRecipient = session.pending?.recipient;
   const hasPendingRecipient = typeof pendingRecipient === "string" && isAddress(pendingRecipient) && getAddress(pendingRecipient) !== zeroAddress;
   if (hasPendingRecipient && !session.claim && recipientInput.value.trim() === "") {
@@ -180,6 +182,13 @@ function showRecipient(): void {
   recipientGrouped.textContent = recipient ? groupAddress(recipient) : "";
 }
 
+function assertSignedRecipient(claim: StoredClaim): void {
+  if (readRecipient() !== getAddress(claim.recipient)) {
+    submitButton.disabled = true;
+    throw new Error("Recipient changed. Request a new signature before submitting.");
+  }
+}
+
 async function loadEligibility(address: Address): Promise<EligibleKey | null> {
   const response = await fetch(claimPageConfig.eligibleJsonUrl);
   if (!response.ok) throw new Error(`eligible.json returned ${response.status}`);
@@ -229,8 +238,9 @@ submitButton.addEventListener("click", async () => {
     setStatus("No injected wallet was found.", true);
     return;
   }
-  showState("submitting");
   try {
+    assertSignedRecipient(claim);
+    showState("submitting");
     const eligible = await loadEligibility(claim.eventKeyAddress);
     if (!eligible) {
       setStatus("This event key is not in the published eligible list.", true);
@@ -240,6 +250,7 @@ submitButton.addEventListener("click", async () => {
     assertProofRoot(proofFile, claimPageConfig.expectedRoot);
     const client = createWalletClient({ chain, transport: custom(ethereum) });
     const [account] = await client.requestAddresses();
+    assertSignedRecipient(claim);
     const call = {
       account,
       address: claimPageConfig.claimContract,
@@ -255,6 +266,7 @@ submitButton.addEventListener("click", async () => {
     } as const;
     // Simulate first so a tampered or already-spent claim fails before the wallet prompt.
     await createPublicClient({ chain, transport: http(claimPageConfig.rpcUrl) }).simulateContract(call);
+    assertSignedRecipient(claim);
     const hash = await client.writeContract(call);
     setStatus(`Claim submitted: ${hash}`);
   } catch (error) {
@@ -262,7 +274,17 @@ submitButton.addEventListener("click", async () => {
   }
 });
 
-recipientInput.addEventListener("input", showRecipient);
+recipientInput.addEventListener("input", () => {
+  showRecipient();
+  const session = loadSession();
+  if (!session.claim || readRecipient() === getAddress(session.claim.recipient)) return;
+  // Once edited, the old signature cannot become ready again without signing.
+  const unsigned = { ...session, claim: undefined, pending: undefined };
+  saveSession(unsigned);
+  hasStatusError = false;
+  render(unsigned, displayedEligibility);
+  showState("recipient", "Recipient changed. Sign again for this recipient before submitting.");
+});
 
 // Handles an app callback or a claim handoff in the URL fragment. The fragment is read
 // before it is cleared. Runs at load and on hashchange, because returning to an already
