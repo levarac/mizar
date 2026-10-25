@@ -54,6 +54,8 @@ setPurpose(claimPageConfig.eventId);
 let hasStatusError = false;
 let recipientErrorReturnState: ClaimView = "idle";
 let displayedEligibility: EligibleKey | null | undefined;
+let displayedSession: Session = {};
+let refreshGeneration = 0;
 
 const chain = defineChain({
   id: claimPageConfig.chainId,
@@ -87,6 +89,7 @@ function describeEligibility(eligible: EligibleKey): string {
 }
 
 function render(session: Session, eligible?: EligibleKey | null): void {
+  displayedSession = session;
   displayedEligibility = eligible;
   const pendingRecipient = session.pending?.recipient;
   const hasPendingRecipient = typeof pendingRecipient === "string" && isAddress(pendingRecipient) && getAddress(pendingRecipient) !== zeroAddress;
@@ -109,7 +112,7 @@ function render(session: Session, eligible?: EligibleKey | null): void {
   signatureEl.textContent = session.claim
     ? `Signature stored for ${groupAddress(session.claim.recipient)}.`
     : "No claim signature yet.";
-  submitButton.disabled = !session.claim || eligible === null;
+  submitButton.disabled = !session.claim || eligible == null;
   renderHandoff(session, eligible);
   if (!hasStatusError) {
     showState(!session.eventKeyAddress ? (hasPendingRecipient ? "signature" : "idle")
@@ -189,6 +192,16 @@ function assertSignedRecipient(claim: StoredClaim): void {
   }
 }
 
+function sameSession(left: Session, right: Session): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function assertCurrentSession(session: Session): void {
+  if (!sameSession(session, displayedSession) || !sameSession(session, loadSession())) {
+    throw new Error("The claim session changed. Check the current claim before submitting.");
+  }
+}
+
 async function loadEligibility(address: Address): Promise<EligibleKey | null> {
   const response = await fetch(claimPageConfig.eligibleJsonUrl);
   if (!response.ok) throw new Error(`eligible.json returned ${response.status}`);
@@ -230,26 +243,35 @@ signButton.addEventListener("click", () => {
 });
 
 submitButton.addEventListener("click", async () => {
-  const session = loadSession();
+  const session = displayedSession;
+  if (!sameSession(session, loadSession())) {
+    void refresh(loadSession());
+    return;
+  }
   const claim = session.claim;
-  if (!claim) return;
+  if (!claim || !displayedEligibility) return;
   const ethereum = (window as Window & { ethereum?: { request: (args: unknown) => Promise<unknown> } }).ethereum;
   if (!ethereum) {
     setStatus("No injected wallet was found.", true);
     return;
   }
   try {
+    assertCurrentSession(session);
     assertSignedRecipient(claim);
     showState("submitting");
     const eligible = await loadEligibility(claim.eventKeyAddress);
+    assertCurrentSession(session);
     if (!eligible) {
       setStatus("This event key is not in the published eligible list.", true);
       return;
     }
     const proofFile = await loadProof(claim.eventKeyAddress);
+    assertCurrentSession(session);
+    assertSignedRecipient(claim);
     assertProofRoot(proofFile, claimPageConfig.expectedRoot);
     const client = createWalletClient({ chain, transport: custom(ethereum) });
     const [account] = await client.requestAddresses();
+    assertCurrentSession(session);
     assertSignedRecipient(claim);
     const call = {
       account,
@@ -266,10 +288,18 @@ submitButton.addEventListener("click", async () => {
     } as const;
     // Simulate first so a tampered or already-spent claim fails before the wallet prompt.
     await createPublicClient({ chain, transport: http(claimPageConfig.rpcUrl) }).simulateContract(call);
+    assertCurrentSession(session);
     assertSignedRecipient(claim);
     const hash = await client.writeContract(call);
+    assertCurrentSession(session);
     setStatus(`Claim submitted: ${hash}`);
   } catch (error) {
+    // A completed request for an older claim must not change the newer page.
+    if (!sameSession(session, loadSession())) {
+      if (!sameSession(displayedSession, loadSession())) void refresh(loadSession());
+      return;
+    }
+    if (!sameSession(session, displayedSession)) return;
     setStatus(error instanceof Error ? error.message : "Claim submission failed.", true);
   }
 });
@@ -368,20 +398,26 @@ async function boot(): Promise<void> {
 }
 
 async function refresh(session: Session): Promise<void> {
+  if (!sameSession(session, loadSession())) return;
+  const generation = ++refreshGeneration;
+  const isCurrent = () => generation === refreshGeneration && sameSession(session, loadSession());
+  // Set the input before rendering, and never overwrite later edits after a fetch.
+  if (session.claim) {
+    recipientInput.value = session.claim.recipient;
+    showRecipient();
+  }
   render(session);
   if (session.eventKeyAddress) {
     try {
       const eligible = await loadEligibility(session.eventKeyAddress);
+      if (!isCurrent()) return;
       render(session, eligible);
     } catch (error) {
+      if (!isCurrent()) return;
       eligibilityEl.textContent = "The published eligibility list could not be read.";
       if (!hasStatusError) showState("error", "The published eligibility list could not be read; check your connection and reload this page.");
       submitButton.disabled = true;
     }
-  }
-  if (session.claim) {
-    recipientInput.value = session.claim.recipient;
-    showRecipient();
   }
 }
 
