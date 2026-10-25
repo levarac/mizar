@@ -1,0 +1,147 @@
+// @vitest-environment happy-dom
+import { secp256k1 } from "@noble/curves/secp256k1";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getAddress, hexToBytes, sha256, toHex, type Address, type Hex } from "viem";
+import html from "../index.html?raw";
+import { addressFromCompressedKey, claimMessageBytes } from "./codec";
+import { loadSession } from "./session";
+
+const config = vi.hoisted(() => ({
+  chainId: 11155111,
+  chainName: "Sepolia",
+  rpcUrl: "https://example.org/rpc",
+  claimContract: "0xC54b23Ce524ea22D41A65c2EfceEc5e483f2F0fC",
+  eventId: `0x${"11".repeat(32)}`,
+  eligibleJsonUrl: "https://example.org/snapshots/1/eligible.json",
+  expectedRoot: `0x${"22".repeat(32)}`,
+  snapshotId: 1,
+}));
+const wallet = vi.hoisted(() => ({
+  requestAddresses: vi.fn(),
+  simulateContract: vi.fn(),
+  writeContract: vi.fn(),
+}));
+vi.mock("./config", () => ({ claimPageConfig: config }));
+vi.mock("viem", async (importOriginal) => ({
+  ...await importOriginal<typeof import("viem")>(),
+  createWalletClient: () => wallet,
+  createPublicClient: () => wallet,
+}));
+vi.mock("qrcode", () => ({ default: { toDataURL: async () => "data:image/png;base64," } }));
+
+const recipient = getAddress("0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC");
+const replacement = getAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8");
+// Public deterministic test material; never used with a real wallet or chain.
+function signedClaim(keyNumber: number, recipient: Address) {
+  const key = new Uint8Array(32);
+  key[31] = keyNumber;
+  const compressedKey = toHex(secp256k1.getPublicKey(key, true));
+  const eventKeyAddress = addressFromCompressedKey(compressedKey);
+  const signed = secp256k1.sign(hexToBytes(sha256(claimMessageBytes({
+    eventId: config.eventId as Hex,
+    chainId: BigInt(config.chainId),
+    claimContract: getAddress(config.claimContract),
+    recipient,
+  }))), key);
+  const signature = toHex(new Uint8Array([...signed.toCompactRawBytes(), signed.recovery + 27]));
+  return { recipient, eventKeyAddress, compressedKey, signature };
+}
+const claimA = signedClaim(1, recipient);
+const eligible = {
+  addresses: [claimA.eventKeyAddress],
+  explanations: [{ address: claimA.eventKeyAddress, partners: [] }],
+};
+const input = () => document.querySelector<HTMLInputElement>("#recipient")!;
+const submit = () => document.querySelector<HTMLButtonElement>("#submit")!;
+const panel = () => document.querySelector<HTMLElement>("#claim-panel")!;
+function editRecipient(value: string) {
+  input().value = value;
+  input().dispatchEvent(new Event("input", { bubbles: true }));
+}
+function response(value: unknown) {
+  return { ok: true, json: async () => value };
+}
+async function signInPage() {
+  vi.spyOn(window.location, "assign").mockImplementation(() => {});
+  await import("./main");
+  await vi.waitFor(() => expect(panel().dataset.state).toBe("idle"));
+  editRecipient(recipient);
+  document.querySelector<HTMLButtonElement>("#sign")!.click();
+  const pending = loadSession().pending!;
+  expect(pending.recipient).toBe(recipient);
+  const fragment = new URLSearchParams({
+    sig: claimA.signature, k: claimA.compressedKey, a: claimA.eventKeyAddress, st: pending.state,
+  });
+  history.replaceState(null, "", `/#${fragment}`);
+  window.dispatchEvent(new Event("hashchange"));
+  await vi.waitFor(() => expect(panel().dataset.state).toBe("ready"));
+  expect(submit().disabled).toBe(false);
+}
+
+beforeEach(() => {
+  vi.resetModules();
+  vi.clearAllMocks();
+  document.body.innerHTML = html.match(/<body>([\s\S]*?)<\/body>/)![1].replace(/<script[\s\S]*?<\/script>/g, "");
+  localStorage.clear();
+  history.replaceState(null, "", "/");
+  wallet.requestAddresses.mockResolvedValue([recipient]);
+  wallet.simulateContract.mockResolvedValue({});
+  wallet.writeContract.mockResolvedValue(`0x${"44".repeat(32)}`);
+  vi.stubGlobal("ethereum", { request: vi.fn() });
+  vi.stubGlobal("fetch", vi.fn(async (url: string) => response(
+    url.includes("/proofs/")
+      ? { address: claimA.eventKeyAddress, root: config.expectedRoot, proof: [] }
+      : eligible,
+  )));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe("signed recipient consistency", () => {
+  it.each([replacement, "invalid", "", `0x${"00".repeat(20)}`])(
+    "blocks Submit after signing and editing the recipient to %s", async (changed) => {
+      await signInPage();
+      editRecipient(changed);
+      // Dispatch directly as well: the handler must refuse a stale signed recipient.
+      submit().dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(wallet.writeContract).not.toHaveBeenCalled();
+      expect(wallet.requestAddresses).not.toHaveBeenCalled();
+      expect(submit().disabled).toBe(true);
+      expect(document.querySelector("#state-status")!.textContent).toMatch(/sign|signature/i);
+    },
+  );
+
+  it("does not restore a discarded signature when the original recipient is entered again", async () => {
+    await signInPage();
+    editRecipient(replacement);
+    editRecipient(recipient);
+    expect(submit().disabled).toBe(true);
+    expect(loadSession().claim).toBeUndefined();
+  });
+
+  it("checks the displayed recipient when building the transaction after awaiting the wallet", async () => {
+    await signInPage();
+    let finish!: (accounts: Address[]) => void;
+    wallet.requestAddresses.mockImplementation(() => new Promise<Address[]>((resolve) => { finish = resolve; }));
+    submit().click();
+    await vi.waitFor(() => expect(wallet.requestAddresses).toHaveBeenCalledOnce());
+    // Programmatic changes do not dispatch input and bypass the disabled-button guard.
+    input().value = replacement;
+    finish([recipient]);
+    await vi.waitFor(() => expect(panel().dataset.state).toBe("error"));
+    expect(wallet.simulateContract).not.toHaveBeenCalled();
+    expect(wallet.writeContract).not.toHaveBeenCalled();
+  });
+
+  it("submits the exact signed recipient when it still matches the input", async () => {
+    await signInPage();
+    submit().click();
+    await vi.waitFor(() => expect(wallet.writeContract).toHaveBeenCalledOnce());
+    expect(wallet.writeContract.mock.calls[0][0].args.slice(1)).toEqual([
+      claimA.eventKeyAddress, [], input().value, claimA.signature,
+    ]);
+  });
+});
