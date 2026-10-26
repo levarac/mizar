@@ -87,7 +87,7 @@ not a block number, and the evaluator does not estimate one or scan logs to
 discover it. Choose a lower bound that includes all relevant events from all
 three registries.
 Only commitments recorded by the event's registered operator can supply the
-mapping. A missing matching event remains `UNAVAILABLE`; timestamps and sequence
+mapping. A missing matching commitment fails verification; timestamps and sequence
 numbers are never used to estimate a block. Commitments after the cutoff are
 mapped but excluded from that snapshot's eligibility calculation. The archived
 mapping is checked again by an independent `verify --rpc` run.
@@ -153,13 +153,22 @@ commitments recorded before event registration. Otherwise supply the registry's
 deployment block explicitly with `--from-block`; starting later could hide an
 omitted commitment.
 
+On Sepolia, use `--from-block 11750745`, the commitment registry deployment
+block, for both live evaluation and verification. Use an earlier block if
+another relevant registry was deployed earlier. Setting the bound too high
+skips earlier logs: missing registration or definition data returns
+`UNAVAILABLE`, while an archived commitment without a matching log fails
+verification. A commitment omitted from both the archive and the scanned
+range cannot be detected. Do not raise the lower bound to fit a call budget.
+
 Both `evaluate` and `verify --rpc` accept these RPC limits:
 
 - `--min-log-span <n>`: stop splitting a rejected block range when it is at most
   this many blocks (default 100). Set it to 10 for an RPC limited to 10 blocks.
-- `--max-log-calls <n>`: total `eth_getLogs` attempts for the entire command
-  (default 500), shared by all registry reads and `RootPosted`, including failed
-  range attempts. Both limits must be positive safe integers.
+- `--max-log-calls <n>`: `eth_getLogs` attempts per read operation (default 500).
+  Registration, definition, commitment and `RootPosted` reads each receive a
+  separate budget, including failed range attempts. Both limits must be positive
+  safe integers.
 
 A range rejected as too wide or too large is bisected until it succeeds or
 reaches the minimum span. For a 10-block RPC, for example:
