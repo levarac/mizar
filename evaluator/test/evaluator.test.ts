@@ -337,7 +337,7 @@ describe("CLI receipt", () => {
       expect(corrupted.stdout).toContain("Observation digest mismatch against commitment");
     } finally { rmSync(out, { recursive: true, force: true }); }
   }, 120_000);
-  const checkRpc = async (liveOnly: boolean, rangeOnly = false) => {
+  const checkRpc = async (liveOnly: boolean, rangeOnly = false, longScan?: "complete" | "exhaust") => {
     const out = mkdtempSync(join(tmpdir(), "mizar-rpc-test-"));
     const contract = "0x00000000000000000000000000000000000000c1";
     const registries = { eventRegistry: "0x00000000000000000000000000000000000000e1",
@@ -345,11 +345,13 @@ describe("CLI receipt", () => {
       commitmentRegistry: "0x00000000000000000000000000000000000000a1" };
     const [page] = pages, admission = page.admission, anchor = page.commitments[0].anchor;
     const abi = AbiCoder.defaultAbiCoder(), word = (value: string | number) => zeroPadValue(toBeHex(value), 32);
-    const cutoff = params.snapshot.cutoffBlock, rangeCap = rangeOnly ? 10 : 1_500;
-    const registrationBlock = rangeOnly ? 80 : 10;
-    let head = rangeOnly ? 110 : 5_000, getLogsCalls = 0;
+    const startBlock = longScan ? 11_750_745 : 0;
+    const cutoff = params.snapshot.cutoffBlock + startBlock, rangeCap = longScan ? 10_000 : rangeOnly ? 10 : 1_500;
+    const registrationBlock = startBlock + (rangeOnly ? 80 : 10);
+    let head = longScan ? 13_000_000 : rangeOnly ? 110 : 5_000, getLogsCalls = 0;
+    const callsByTopic = new Map<string, number>();
     let posted = { root: "", manifestDigest: "", cutoffBlock: cutoff };
-    let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest];
+    let postedLogPresent = true, anchorBlock = anchors[anchor.commitmentDigest] + startBlock;
     let extraCommitment = false, junkCommitment = false, extraDefinition = false, rpcDown = false;
     let commitmentPresent = true, foreignRecorder = false;
     const requestedFroms: number[] = [];
@@ -369,7 +371,7 @@ describe("CLI receipt", () => {
         const definition = (sequence: number, digest: string, previous: string, block: number) =>
           log(registries.definitionRegistry, block, [topic0, "0x" + page.context, word(sequence), "0x" + digest],
             abi.encode(["bytes32", "uint64", "uint64", "uint64"], ["0x" + previous, d.validFrom, d.validUntil, d.anchoredAt]));
-        return [definition(d.sequence, d.definitionDigest, d.previousDefinitionDigest, rangeOnly ? 85 : 20),
+        return [definition(d.sequence, d.definitionDigest, d.previousDefinitionDigest, startBlock + (rangeOnly ? 85 : 20)),
           ...(extraDefinition ? [definition(d.sequence + 1, "cd".repeat(32), d.definitionDigest, 30)] : [])];
       }
       if (topic0 === id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")) {
@@ -391,6 +393,7 @@ describe("CLI receipt", () => {
     const getLogs = (filter: { fromBlock: string; toBlock: string; topics: string[] }) => {
       const from = Number(filter.fromBlock), to = filter.toBlock === "latest" ? head : Number(filter.toBlock);
       getLogsCalls++;
+      callsByTopic.set(filter.topics[0], (callsByTopic.get(filter.topics[0]) ?? 0) + 1);
       requestedFroms.push(from);
       if (rpcDown) return { error: { code: -32603, message: "internal error at https://rpc.example/secret-test-token" } };
       if (to - from + 1 > rangeCap) return { error: { code: -32005, message: "block range too large" } };
@@ -436,8 +439,12 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       child.on("close", status => done({ status, stdout, stderr }));
     });
     const fixtures = join(root, "test/fixtures");
-    const published = { ...params, ...registries, evidenceSource: join(fixtures, "envelopes.json"),
-      credentialsSource: join(fixtures, "credentials.json"), anchorBlocksSource: join(fixtures, "anchor-blocks.json"),
+    const anchorBlocks = join(out, "anchor-blocks.json");
+    writeFileSync(anchorBlocks, JSON.stringify(Object.fromEntries(
+      Object.entries(anchors).map(([digest, block]) => [digest, block + startBlock]))));
+    const published = { ...params, ...registries, snapshot: { ...params.snapshot, cutoffBlock: cutoff },
+      evidenceSource: join(fixtures, "envelopes.json"),
+      credentialsSource: join(fixtures, "credentials.json"), anchorBlocksSource: anchorBlocks,
       pendingSource: undefined };
     const trustedParams = join(out, "published-params.json");
     writeFileSync(trustedParams, JSON.stringify(published));
@@ -470,6 +477,27 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       expect(result.stdout).toContain(reason);
     };
     try {
+      if (longScan) {
+        const honest = await evaluateAs("long-scan");
+        if (longScan === "exhaust") head = 15_000_000;
+        const result = await verifyOnChain(honest.manifest, { "from-block": String(startBlock) });
+        if (longScan === "complete") {
+          expect(result.stdout, result.stderr).toContain('"result":"PASS"');
+          expect(result.status).toBe(0);
+          expect(getLogsCalls).toBeGreaterThan(500);
+          expect(callsByTopic.size).toBe(4);
+          expect([...callsByTopic.values()].every(calls => calls <= 500)).toBe(true);
+          expect(Math.min(...requestedFroms)).toBe(startBlock);
+        } else {
+          expect(result.stdout, result.stderr).toContain('"result":"UNAVAILABLE"');
+          expect(result.stdout).toContain("more than 500 eth_getLogs calls");
+          expect(result.stdout).not.toContain('"result":"PASS"');
+          expect(result.status).toBe(2);
+          expect(callsByTopic.get(id("ObservationCommitmentRecorded(bytes32,uint64,bytes32,bytes32,address,uint64)")))
+            .toBe(500);
+        }
+        return;
+      }
       if (rangeOnly) {
         const liveParams = join(out, "range-params.json");
         const live = { ...published, registrationBlock,
@@ -486,31 +514,31 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
         const evaluated = await evaluateLimited("limited");
         expect(evaluated.stdout, evaluated.stderr).toContain('"result":"EVALUATED"');
         expect(evaluated.status).toBe(0);
-        const evaluationCalls = getLogsCalls;
-        expect(evaluationCalls).toBeGreaterThan(3);
+        expect(getLogsCalls).toBeGreaterThan(3);
+        const evaluationCalls = Math.max(...callsByTopic.values());
         expect(Math.min(...requestedFroms)).toBe(registrationBlock);
         const evaluatedReceipt = receiptOf(evaluated), manifest = join(out, "limited/manifest.json");
         expect(evaluatedReceipt.root).toBe("0x4e663e1d45553efdf5247a720b30f569a340fe2e7c4294501d04608160230fe9");
         posted = { root: evaluatedReceipt.root, manifestDigest: evaluatedReceipt.manifestDigest, cutoffBlock: cutoff };
-        getLogsCalls = 0; requestedFroms.length = 0;
+        getLogsCalls = 0; requestedFroms.length = 0; callsByTopic.clear();
         const verified = await verifyOnChain(manifest, limits);
         expect(verified.stdout, verified.stderr).toContain('"result":"PASS"');
         expect(verified.status).toBe(0);
         expect(Math.min(...requestedFroms)).toBe(registrationBlock);
-        const verificationCalls = getLogsCalls;
+        const verificationCalls = Math.max(...callsByTopic.values());
 
-        // The budget is shared across registry reads and RootPosted, including rejected ranges.
-        getLogsCalls = 0;
+        // Each read includes rejected ranges in its own budget.
+        getLogsCalls = 0; callsByTopic.clear();
         const capped = await evaluateLimited("capped", "--max-log-calls", String(evaluationCalls - 1));
         expect(capped.status).toBe(2);
         expect(capped.stdout).toContain('"result":"UNAVAILABLE"');
         expect(capped.stdout).toContain(`more than ${evaluationCalls - 1} eth_getLogs calls`);
-        expect(getLogsCalls).toBe(evaluationCalls - 1);
+        expect(Math.max(...callsByTopic.values())).toBe(evaluationCalls - 1);
         expect(existsSync(join(out, "capped/manifest.json"))).toBe(false);
-        getLogsCalls = 0;
+        getLogsCalls = 0; callsByTopic.clear();
         await expectUnavailable(manifest, `more than ${verificationCalls - 1} eth_getLogs calls`,
           { ...limits, "max-log-calls": String(verificationCalls - 1) });
-        expect(getLogsCalls).toBe(verificationCalls - 1);
+        expect(Math.max(...callsByTopic.values())).toBe(verificationCalls - 1);
         await expectUnavailable(manifest, "RPC unavailable", { "max-log-calls": "200" });
         expect((await evaluateLimited("default-span", "--min-log-span", "100")).stdout)
           .toContain('"result":"UNAVAILABLE"');
@@ -715,6 +743,10 @@ globalThis.fetch = (url, init) => String(url).startsWith("https://evidence.examp
       rmSync(out, { recursive: true, force: true });
     }
   };
+  it("verifies a Sepolia-sized head with independent budgets for four 10,000-block-capped reads",
+    () => checkRpc(false, false, "complete"), 240_000);
+  it("returns UNAVAILABLE when one long log read exhausts its own default budget",
+    () => checkRpc(false, false, "exhaust"), 240_000);
   it("configures RPC log ranges and budgets with trusted registration bounds", () => checkRpc(false, true), 240_000);
   it("maps live anchors using registered operator events and private RPC input", () => checkRpc(true), 240_000);
   it("checks RootPosted, registries and trusted parameters against a fixture JSON-RPC stub",
